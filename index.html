@@ -832,6 +832,21 @@ function drawOverlay(){
   c.save();c.setLineDash([5,9]);c.lineWidth=1;c.strokeStyle='rgba(0,229,255,.3)';
   c.beginPath();c.moveTo(cx,0);c.lineTo(cx,h);c.stroke();c.restore();
 
+  /* 9-grid: 2 vertical + 2 horizontal dividing screen into 3×3 */
+  c.save();
+  c.setLineDash([]);
+  c.lineWidth=1.2;
+  c.strokeStyle='rgba(0,229,255,.45)';
+  c.shadowColor='rgba(0,229,255,.6)';
+  c.shadowBlur=6;
+  c.beginPath();
+  c.moveTo(w/3,0);c.lineTo(w/3,h);
+  c.moveTo(w*2/3,0);c.lineTo(w*2/3,h);
+  c.moveTo(0,h/3);c.lineTo(w,h/3);
+  c.moveTo(0,h*2/3);c.lineTo(w,h*2/3);
+  c.stroke();
+  c.restore();
+
   var m=MODES[S.mode];
   var hy=m.head*h,r=m.r*h,neckY=m.neck*h,shY=m.sh*h,shw=m.shl*w;
   var wy=(m.torsoEnd!=null?m.torsoEnd:(m.hip!=null?Math.max(.35,m.hip-.03):.6))*h;
