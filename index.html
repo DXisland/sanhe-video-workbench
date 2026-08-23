@@ -240,69 +240,49 @@ html,body{width:100%;height:100%;overflow:hidden;position:fixed;inset:0;backgrou
 <div class="view" id="view-prep">
   <div class="topbar">
     <button class="backchip" id="prepBack">‹</button>
-    <h2>拍摄前的准备</h2>
+    <h2>拍摄前准备</h2>
     <div class="spacer"></div>
   </div>
-  <div class="steps">
-    <div class="step" data-step="1"><i>1</i><span>拍摄风格</span></div>
-    <div class="step" data-step="2"><i>2</i><span>脚本</span></div>
-    <div class="step" data-step="3"><i>3</i><span>口播文案</span></div>
-  </div>
-
   <div class="scroller" id="prepScroller">
-    <div class="panel on" data-panel="1">
-      <div class="ph">第一步 · 选择拍摄风格</div>
-      <div class="phint">先确定这条视频的风格基调，后续脚本和文案都会围绕它展开。<br><b>当前为示例风格库</b>，正式风格与推荐逻辑后续接入。</div>
-      <div class="stylegrid" id="styleGrid">
-        <div class="style-card" data-id="hot">
-          <div class="sname"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c1 3-2 4.5-2 7a4 4 0 0 0 8 0c0-1.5-.6-2.7-1.4-3.8C15.5 8 14 8.5 14 7c0-1.6-1-3.2-2-4z"/></svg>热情带货风</div>
-          <div class="sdesc">语速快、感染力强，促销信息密集，适合引流款</div>
-        </div>
-        <div class="style-card" data-id="pro">
-          <div class="sname"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V6a2 2 0 0 1 2-2h13v13H6a2 2 0 0 0-2 2zm0 0a2 2 0 0 0 2 2h13"/></svg>专业讲解风</div>
-          <div class="sdesc">权威可信、条理清晰，适合高客单价项目</div>
-        </div>
-        <div class="style-card" data-id="easy">
-          <div class="sname"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14a4.5 4.5 0 0 0 7 0M9 9.5h.01M15 9.5h.01"/></svg>轻松生活风</div>
-          <div class="sdesc">亲切自然像朋友聊天，适合日常探店记录</div>
-        </div>
-        <div class="style-card" data-id="high">
-          <div class="sname"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h12l3 5-9 11L3 9l3-5zM3 9h18M9.5 9L12 4l2.5 5M12 20L9.5 9M12 20l2.5-11"/></svg>高端质感风</div>
-          <div class="sdesc">慢节奏、画面精致，突出环境与服务品质</div>
-        </div>
-        <div class="style-card" data-id="plot">
-          <div class="sname"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 6-2 7-2 7h16s-2-1-2-7M10 19a2.2 2.2 0 0 0 4 0"/></svg>剧情反转型</div>
-          <div class="sdesc">有情节有钩子，前 3 秒制造冲突吸引看完</div>
-        </div>
-        <div class="style-card" data-id="vlog">
-          <div class="sname"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="12" height="12" rx="2"/><path d="M15 10.5l6-3v9l-6-3"/></svg>探店Vlog风</div>
-          <div class="sdesc">第一视角真实记录，边走边说的沉浸感</div>
-        </div>
+    <div class="phint" style="margin-bottom:16px">完成下方三项选择，自动生成定制化拍摄指导清单</div>
+
+    <div class="sect">
+      <div class="ph">1A · 拍摄场景</div>
+      <div class="optgrid" id="sceneGrid">
+        <button class="opt" data-k="scene" data-v="indoor"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle;margin-right:6px"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>室内拍摄</button>
+        <button class="opt" data-k="scene" data-v="outdoor"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle;margin-right:6px"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>室外拍摄</button>
       </div>
     </div>
 
-    <div class="panel" data-panel="2">
-      <div class="ph">第二步 · 撰写脚本</div>
-      <div class="phint">围绕上面选择的风格，确定视频的结构与关键信息。<br><b>脚本智能生成制作中</b>，可先手动粘贴或撰写，内容会自动保存。</div>
-      <div class="pfield">
-        <textarea class="ptext" id="scriptText" placeholder="在此粘贴或撰写脚本…&#10;&#10;例如：开头钩子 → 卖点 1 / 卖点 2 → 行动号召"></textarea>
-        <div class="pmeta"><span id="scriptCount">0 字</span><span>脚本生成逻辑待接入</span></div>
+    <div class="sect">
+      <div class="ph">1B · 出镜模式</div>
+      <div class="optgrid" id="modeGrid">
+        <button class="opt" data-k="actor" data-v="single"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle;margin-right:6px"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>单人出镜</button>
+        <button class="opt" data-k="actor" data-v="dual"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle;margin-right:6px"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>双人出镜</button>
       </div>
     </div>
 
-    <div class="panel" data-panel="3">
-      <div class="ph">第三步 · 确认口播文案</div>
-      <div class="phint">这是最终要念的内容。<b>文案生成功能制作中</b>；确认后点击下方按钮，文案将自动带入拍摄页的提词器。</div>
-      <div class="pfield">
-        <textarea class="ptext" id="copyText" placeholder="在此粘贴或编辑最终口播文案…&#10;&#10;生成后无需复制，直接带去拍摄即可"></textarea>
-        <div class="pmeta"><span id="copyMeta">0 字 · 约 0 秒</span><span id="copySaveState">自动保存</span></div>
+    <div class="sect">
+      <div class="ph">1C · 收声方式</div>
+      <div class="optgrid" id="audioGrid">
+        <button class="opt" data-k="audio" data-v="phone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle;margin-right:6px"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>手机自带收声</button>
+        <button class="opt" data-k="audio" data-v="lavalier"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle;margin-right:6px"><path d="M11 2v2"/><path d="M5 14h14"/><path d="M5 14a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-4"/><line x1="12" y1="4" x2="12" y2="6"/></svg>小蜜蜂/耳机收声</button>
+      </div>
+    </div>
+
+    <div id="guideResult" class="hide">
+      <div class="genbox" style="margin-top:0">
+        <div class="genhead">
+          <span class="gbadge">已生成定制指导</span>
+          <button class="regen" id="regenBtn">重新选择</button>
+        </div>
+        <div id="guideContent"></div>
       </div>
     </div>
   </div>
 
   <div class="actionbar">
-    <button class="abtn ghost slim" id="prepPrev">上一步</button>
-    <button class="abtn primary" id="prepNext">下一步</button>
+    <button class="abtn primary" id="prepGo" disabled>请完成上方三项选择</button>
   </div>
 </div>
 
@@ -496,90 +476,135 @@ function fmtDur(sec){
   if(sec<60)return '约 '+sec+' 秒';
   return '约 '+Math.floor(sec/60)+' 分 '+(sec%60)+' 秒';
 }
+var prep={
+  state:{scene:null,actor:null,audio:null},
+  guideHtml:''
+};
+function loadJSON(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}}
+function savePrep(){try{localStorage.setItem('prep_draft_v2',JSON.stringify(prep.state))}catch(e){}}
+function allSelected(){return prep.state.scene&&prep.state.actor&&prep.state.audio}
 function initPrep(){
-  var draft=loadJSON('prep_draft_v1');
+  var draft=loadJSON('prep_draft_v2');
   if(draft){
-    if(draft.style)prep.state.style=draft.style;
-    if(typeof draft.script==='string')prep.state.script=draft.script;
-    if(typeof draft.copy==='string')prep.state.copy=draft.copy;
+    if(draft.scene)prep.state.scene=draft.scene;
+    if(draft.actor)prep.state.actor=draft.actor;
+    if(draft.audio)prep.state.audio=draft.audio;
   }
-  var cards=document.querySelectorAll('#styleGrid .style-card');
-  for(var i=0;i<cards.length;i++){
-    (function(card){
-      card.addEventListener('click',function(){
-        var old=document.querySelector('#styleGrid .style-card.sel');
-        if(old)old.classList.remove('sel');
-        card.classList.add('sel');
-        prep.state.style=card.getAttribute('data-id');
-        savePrep();
-      });
-      if(card.getAttribute('data-id')===prep.state.style)card.classList.add('sel');
-    })(cards[i]);
-  }
-  $('scriptText').value=prep.state.script;
-  $('copyText').value=prep.state.copy;
-  updScriptCount();
-  updCopyMeta();
-
-  $('scriptText').addEventListener('input',function(){
-    prep.state.script=this.value;
-    savePrep();updScriptCount();
-  });
-  $('copyText').addEventListener('input',function(){
-    prep.state.copy=this.value;
-    savePrep();updCopyMeta();
-    if(prep.step===3){
-      var has=this.value.trim().length>0,nx=$('prepNext');
-      nx.classList.toggle('primary',has);
-      nx.classList.toggle('ghost',!has);
-    }
-  });
-
+  bindGrid('sceneGrid');
+  bindGrid('modeGrid');
+  bindGrid('audioGrid');
+  restoreSel('sceneGrid',prep.state.scene);
+  restoreSel('modeGrid',prep.state.actor);
+  restoreSel('audioGrid',prep.state.audio);
+  if(allSelected()){showGuide()}
+  updateGoBtn();
   $('prepBack').addEventListener('click',function(){switchView('home')});
-  $('prepPrev').addEventListener('click',function(){if(prep.step>1)gotoStep(prep.step-1)});
-  $('prepNext').addEventListener('click',function(){
-    if(prep.step<3){gotoStep(prep.step+1)}else{goShoot()}
+  $('prepGo').addEventListener('click',goShoot);
+  $('regenBtn').addEventListener('click',function(){
+    prep.state.scene=prep.state.actor=prep.state.audio=null;
+    savePrep();
+    clearSel('sceneGrid');clearSel('modeGrid');clearSel('audioGrid');
+    $('guideResult').classList.add('hide');
+    updateGoBtn();
   });
-  gotoStep(prep.step);
 }
-function updScriptCount(){
-  var n=$('scriptText').value.replace(/\s/g,'').length;
-  $('scriptCount').textContent=fmtChars(n);
-}
-function updCopyMeta(){
-  var val=$('copyText').value;
-  var n=val.replace(/\s/g,'').length;
-  $('copyMeta').textContent=fmtChars(n)+' · '+fmtDur(estSec(n));
-}
-function gotoStep(n){
-  prep.step=n;
-  var panels=document.querySelectorAll('#view-prep .panel');
-  for(var i=0;i<panels.length;i++)panels[i].classList.toggle('on',panels[i].getAttribute('data-panel')==String(n));
-  var steps=document.querySelectorAll('.steps .step');
-  for(var j=0;j<steps.length;j++){
-    var sn=Number(steps[j].getAttribute('data-step'));
-    steps[j].classList.toggle('cur',sn===n);
-    steps[j].classList.toggle('done',sn<n);
-    steps[j].querySelector('i').textContent=sn<n?'✓':String(sn);
+function bindGrid(gridId){
+  var btns=document.querySelectorAll('#'+gridId+' .opt');
+  for(var i=0;i<btns.length;i++){
+    (function(btn){
+      btn.addEventListener('click',function(){
+        var k=btn.getAttribute('data-k'),v=btn.getAttribute('data-v');
+        if(prep.state[k]===v)return;
+        var cur=document.querySelector('#'+gridId+' .opt.sel');
+        if(cur)cur.classList.remove('sel');
+        btn.classList.add('sel');
+        prep.state[k]=v;
+        savePrep();
+        if(allSelected())showGuide();
+        updateGoBtn();
+      });
+    })(btns[i]);
   }
-  $('prepPrev').style.visibility=n===1?'hidden':'visible';
-  var nx=$('prepNext');
-  if(n<3){nx.textContent='下一步';nx.classList.add('primary');nx.classList.remove('ghost')}
-  else{
-    nx.textContent='带入提词器 · 去拍摄';
-    nx.classList.toggle('primary',$('copyText').value.trim().length>0);
-    nx.classList.toggle('ghost',$('copyText').value.trim().length===0);
-  }
-  $('prepScroller').scrollTop=0;
+}
+function restoreSel(gridId,val){
+  if(!val)return;
+  var btn=document.querySelector('#'+gridId+' .opt[data-v="'+val+'"]');
+  if(btn)btn.classList.add('sel');
+}
+function clearSel(gridId){
+  var cur=document.querySelector('#'+gridId+' .opt.sel');
+  if(cur)cur.classList.remove('sel');
+}
+function updateGoBtn(){
+  var b=$('prepGo');
+  if(!allSelected()){b.disabled=true;b.textContent='请完成上方三项选择'}
+  else{b.disabled=false;b.textContent='带入提词器 · 去拍摄'}
+}
+function showGuide(){
+  prep.guideHtml=buildGuide();
+  $('guideContent').innerHTML=prep.guideHtml;
+  $('guideResult').classList.remove('hide');
+  updateGoBtn();
 }
 function goShoot(){
-  var txt=$('copyText').value.trim();
-  if(!txt){toast('口播文案还是空的，先填写或生成一段吧','warn');return}
+  if(!allSelected()){toast('请先完成上方三项选择','warn');return}
   savePrep();
-  try{localStorage.setItem('kz_prompter_text',txt)}catch(e){}
-  PENDING_PROMPT=txt;
+  var prompt='【拍摄指导清单】\n'+prep.guideHtml.replace(/<[^>]+>/g,'').replace(/\n\s*\n/g,'\n');
+  try{localStorage.setItem('kz_prompter_text',prompt)}catch(e){}
+  PENDING_PROMPT=prompt;
   switchView('cam');
-  toast('文案已就绪：开启摄像头后将自动进入提词器','good');
+  toast('指导清单已带入提词器','good');
+}
+function buildGuide(){
+  var s=prep.state.scene,a=prep.state.actor,au=prep.state.audio;
+  var sceneLabel=s==='indoor'?'室内拍摄':'室外拍摄';
+  var actorLabel=a==='single'?'单人出镜':'双人出镜';
+  var audioLabel=au==='phone'?'手机自带收声':'小蜜蜂/耳机收声';
+  var html='';
+  html+='<div style="margin-bottom:12px"><b>您的选择：</b> '+sceneLabel+' · '+actorLabel+' · '+audioLabel+'</div>';
+  // A. 手机硬件调试与使用
+  html+='<div style="margin-top:16px;padding:12px;background:rgba(0,229,255,.08);border-radius:10px;border:1px solid rgba(0,229,255,.2)">';
+  html+='<div style="font-weight:600;color:#7ff6ff;margin-bottom:8px">A. 手机硬件调试与使用 <span style="font-weight:400;font-size:12px;color:#8fb3c7">('+sceneLabel+')</span></div>';
+  html+='<div style="font-size:13px;color:#cfe4f0;line-height:1.9">'+getPhoneGuide(s)+'</div>';
+  html+='</div>';
+  // B. 被拍摄者注意事项
+  html+='<div style="margin-top:16px;padding:12px;background:rgba(255,200,87,.08);border-radius:10px;border:1px solid rgba(255,200,87,.2)">';
+  html+='<div style="font-weight:600;color:#ffd987;margin-bottom:8px">B. 被拍摄者注意事项 <span style="font-weight:400;font-size:12px;color:#8fb3c7">('+actorLabel+')</span></div>';
+  html+='<div style="font-size:13px;color:#cfe4f0;line-height:1.9">'+getActorGuide(a)+'</div>';
+  html+='</div>';
+  // C. 音频降噪提示
+  html+='<div style="margin-top:16px;padding:12px;background:rgba(61,255,160,.08);border-radius:10px;border:1px solid rgba(61,255,160,.2)">';
+  html+='<div style="font-weight:600;color:#7dffaa;margin-bottom:8px">C. 音频降噪提示 <span style="font-weight:400;font-size:12px;color:#8fb3c7">('+audioLabel+')</span></div>';
+  html+='<div style="font-size:13px;color:#cfe4f0;line-height:1.9">'+getAudioGuide(au)+'</div>';
+  html+='</div>';
+  // 步骤2 提示
+  html+='<div style="margin-top:16px;padding:12px;background:rgba(255,255,255,.04);border-radius:10px;border:1px dashed rgba(147,170,190,.3)">';
+  html+='<div style="font-weight:600;color:#fff;margin-bottom:8px">下一步：拍摄前最终检查（步骤2）</div>';
+  html+='<div style="font-size:13px;color:#cfe4f0;line-height:1.9">设备最终检查（收音麦测试/补光灯/勿扰模式）<br>出镜人最终确认（着装/脚本/走位）<br>场景最终检查（背景/光线/室内关音乐/室外防风噪）<br>参数最终确认（九宫格/美颜/1080P/对焦锁定）</div>';
+  html+='</div>';
+  return html;
+}
+function getPhoneGuide(s){
+  var base='<b>通用调试：</b> 电量充足/存储空间/镜头清洁/开启勿扰/九宫格辅助/关闭美颜/1080P 30fps/开启防抖/对焦锁定/曝光调节。';
+  if(s==='indoor'){
+    return base+'<br><br><b>室内专属：</b> 准备补光灯/避开头顶日光灯直射/设置白平衡/关闭背景音乐/避免混响大的空间。';
+  }else{
+    return base+'<br><br><b>室外专属：</b> 选阴影处拍摄/避开正午直射/面朝光源/屏幕亮度调最高/小蜜蜂加防风毛套/防手机过热遮阴。';
+  }
+}
+function getActorGuide(a){
+  if(a==='single'){
+    return '<b>单人出镜：</b> 站位居中/头顶留白(黄金分割线)/拍摄距离1.5-2米/双脚自然分开/上半身微前倾/目光看镜头/语速适中/手势自然配合台词。';
+  }else{
+    return '<b>双人出镜：</b> 并排站位/间距约一臂长/拍摄距离2-2.5米/互动眼神交流/说话轮流不抢话/收音麦一人一只/两人着装风格协调/高度差不大。';
+  }
+}
+function getAudioGuide(au){
+  if(au==='phone'){
+    return '<b>手机自带收声：</b> 后期需做音频降噪处理/拍摄时务必选安静环境/靠近手机20-30cm大声清晰说/避免空调/风扇/人声嘈杂背景。';
+  }else{
+    return '<b>小蜜蜂/耳机收声：</b> 后期无需降噪/拍摄前确认电量充足/信号稳定/发射器贴身隐藏/接收器插稳手机/测试收音清晰无电流声。';
+  }
 }
 
 /* ---------- Camera module ---------- */
