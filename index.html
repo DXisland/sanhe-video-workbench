@@ -80,6 +80,28 @@ html,body{width:100%;height:100%;overflow:hidden;position:fixed;inset:0;backgrou
 .pmeta{display:flex;justify-content:space-between;margin-top:7px;font-size:11px;color:#5d7f99;font-variant-numeric:tabular-nums}
 .pmeta .est{color:#7fd7ee}
 
+.field{margin-bottom:12px}
+.field>label{display:block;font-size:12px;color:#8fb3c7;margin-bottom:6px;letter-spacing:1px}
+.field label em{color:#ff7d94;font-style:normal;margin-left:3px}
+.finput,.fselect{width:100%;background:rgba(4,12,22,.75);border:1px solid rgba(147,170,190,.3);border-radius:11px;color:#e8f6ff;font-size:14.5px;padding:11px 12px;outline:none;font-family:inherit;-webkit-user-select:text;user-select:text}
+.finput:focus,.fselect:focus{border-color:rgba(0,229,255,.75);box-shadow:0 0 10px rgba(0,229,255,.12)}
+.finput::placeholder{color:rgba(143,179,199,.42)}
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.morebtn{width:100%;background:none;border:1px dashed rgba(147,170,190,.4);border-radius:11px;color:#8fb3c7;font-size:12.5px;padding:9px 0;letter-spacing:2px;cursor:pointer}
+.morebtn:active{opacity:.6}
+.morebox{overflow:hidden;max-height:0;transition:max-height .35s ease}
+.morebox.open{max-height:1200px}
+
+.scard{width:100%;max-width:520px;margin:0 auto 16px;padding:14px;border-radius:16px;border:1px solid rgba(0,229,255,.32);background:linear-gradient(165deg,rgba(10,26,46,.88),rgba(6,12,22,.92));box-shadow:0 6px 24px rgba(0,0,0,.3)}
+.scardHead{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin-bottom:10px}
+.scardHead b{font-size:14.5px;color:#eafcff;letter-spacing:1px}
+.stag{font-size:10px;padding:3px 9px;border-radius:999px;border:1px solid rgba(255,200,87,.45);color:#ffd987}
+.stag.cy{border-color:rgba(0,229,255,.5);color:#9feaff}
+.stext{font-size:13.5px;line-height:2.05;color:#dff0fa;white-space:pre-wrap;word-break:break-word;-webkit-user-select:text;user-select:text}
+.pubbox{margin-top:11px;padding:9px 11px;border-radius:10px;background:rgba(255,255,255,.04);border:1px dashed rgba(147,170,190,.28);font-size:12px;line-height:1.95;color:#b9d4e4;white-space:pre-wrap;-webkit-user-select:text;user-select:text}
+.sfoot{display:flex;gap:9px;margin-top:12px}
+.sfoot .abtn{font-size:13px;padding:10px 0;letter-spacing:2px}
+
 .actionbar{flex:none;display:flex;gap:11px;padding:11px 20px calc(env(safe-area-inset-bottom) + 14px);background:linear-gradient(transparent,rgba(4,7,13,.92) 38%)}
 .abtn{flex:1;padding:13px 0;border:0;border-radius:13px;font-size:15px;font-weight:700;letter-spacing:3px;cursor:pointer}
 .abtn.primary{color:#03222e;background:linear-gradient(120deg,#7ff6ff,#00e5ff 50%,#4d9dff);box-shadow:0 6px 24px rgba(0,229,255,.35),inset 0 1px 0 rgba(255,255,255,.6)}
@@ -212,12 +234,12 @@ html,body{width:100%;height:100%;overflow:hidden;position:fixed;inset:0;backgrou
         <span class="verchip">框架版 v0.1</span>
       </div>
       <div id="slogan">准备 · 拍摄 · 剪辑 一步到位</div>
-      <p class="homeintro">为门店员工打造的三合一成片工具：选好风格、拿到口播文案，对着提词器直接开拍，人人都能轻松产出成品视频。</p>
+      <p class="homeintro">为门店员工打造的三合一成片工具：填好产品信息一键生成口播脚本，带着表演标注对提词器开拍，人人都能产出成品视频。</p>
       <div class="homecards">
         <div class="hcard" data-go="prep">
           <div class="hicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h6M9 11h6M9 15h4"/></svg></div>
-          <div class="htxt"><b>拍摄前的准备</b><span>选风格 · 选品类 · 自动生成口播文案</span></div>
-          <span class="hbadge warn">框架就绪</span>
+          <div class="htxt"><b>拍摄前的准备</b><span>填产品信息 · 一键出脚本 · 直达提词器</span></div>
+          <span class="hbadge warn">脚本生成</span>
           <span class="harrow">›</span>
         </div>
         <div class="hcard" data-go="cam">
@@ -232,7 +254,7 @@ html,body{width:100%;height:100%;overflow:hidden;position:fixed;inset:0;backgrou
           <span class="hbadge off">敬请期待</span>
         </div>
       </div>
-      <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br>板块①的生成逻辑与板块③的剪辑能力正在接入中</div>
+      <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br>板块①脚本为本地模板生成，可对接技能后端升级为 AI 生成</div>
     </div>
   </div>
 </div>
@@ -240,49 +262,93 @@ html,body{width:100%;height:100%;overflow:hidden;position:fixed;inset:0;backgrou
 <div class="view" id="view-prep">
   <div class="topbar">
     <button class="backchip" id="prepBack">‹</button>
-    <h2>拍摄前准备</h2>
+    <h2>脚本创作</h2>
     <div class="spacer"></div>
   </div>
   <div class="scroller" id="prepScroller">
-    <div class="phint" style="margin-bottom:16px">完成下方三项选择，自动生成定制化拍摄指导清单</div>
+    <div class="phint" style="margin-bottom:16px">按「抖本短视频脚本」规范填写产品信息，一键生成带<b>表演标注</b>的口播/对话脚本，选中即可带进提词器开拍</div>
 
     <div class="sect">
-      <div class="ph">1A · 拍摄场景</div>
-      <div class="optgrid" id="sceneGrid">
-        <button class="opt" data-k="scene" data-v="indoor"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle;margin-right:6px"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>室内拍摄</button>
-        <button class="opt" data-k="scene" data-v="outdoor"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle;margin-right:6px"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>室外拍摄</button>
+      <div class="ph">产品信息</div>
+      <div class="field">
+        <label>产品 / 服务<em>*</em></label>
+        <input class="finput" id="fProduct" placeholder="如：49元手机代金券 / 千兆宽带套餐">
       </div>
-    </div>
-
-    <div class="sect">
-      <div class="ph">1B · 出镜模式</div>
-      <div class="optgrid" id="modeGrid">
-        <button class="opt" data-k="actor" data-v="single"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle;margin-right:6px"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>单人出镜</button>
-        <button class="opt" data-k="actor" data-v="dual"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle;margin-right:6px"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>双人出镜</button>
+      <div class="field">
+        <label>售卖地市范围<em>*</em></label>
+        <input class="finput" id="fCity" placeholder="如：南昌（多个地市用、分隔）">
       </div>
-    </div>
 
-    <div class="sect">
-      <div class="ph">1C · 收声方式</div>
-      <div class="optgrid" id="audioGrid">
-        <button class="opt" data-k="audio" data-v="phone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle;margin-right:6px"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>手机自带收声</button>
-        <button class="opt" data-k="audio" data-v="lavalier"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle;margin-right:6px"><path d="M11 2v2"/><path d="M5 14h14"/><path d="M5 14a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-4"/><line x1="12" y1="4" x2="12" y2="6"/></svg>小蜜蜂/耳机收声</button>
-      </div>
-    </div>
-
-    <div id="guideResult" class="hide">
-      <div class="genbox" style="margin-top:0">
-        <div class="genhead">
-          <span class="gbadge">已生成定制指导</span>
-          <button class="regen" id="regenBtn">重新选择</button>
+      <button class="morebtn" id="moreBtn" style="margin-top:4px">展开更多设置 ▾</button>
+      <div class="morebox" id="moreBox">
+        <div style="padding-top:14px">
+          <div class="frow">
+            <div class="field"><label>价格说明</label><input class="finput" id="fPrice" placeholder="如：49元/月"></div>
+            <div class="field"><label>口播时长</label>
+              <select class="fselect" id="fDur">
+                <option value="15-30" selected>15-30秒</option>
+                <option value="30-45">30-45秒</option>
+                <option value="45-60">45-60秒</option>
+              </select>
+            </div>
+          </div>
+          <div class="frow">
+            <div class="field"><label>使用门槛</label><input class="finput" id="fGate" placeholder="默认不限机型"></div>
+            <div class="field"><label>有效期</label><input class="finput" id="fValid" placeholder="如：本月内有效"></div>
+          </div>
+          <div class="frow">
+            <div class="field"><label>渠道限定</label><input class="finput" id="fChan" placeholder="默认到店核销"></div>
+            <div class="field"><label>目标人群</label><input class="finput" id="fCrowd" placeholder="留空自动推断"></div>
+          </div>
+          <div class="frow">
+            <div class="field"><label>生成数量 N</label>
+              <select class="fselect" id="fCount">
+                <option value="1">1条</option>
+                <option value="2">2条</option>
+                <option value="3" selected>3条</option>
+                <option value="4">4条</option>
+                <option value="5">5条</option>
+              </select>
+            </div>
+            <div class="field"><label>对话形式 M 条</label>
+              <select class="fselect" id="fDlg">
+                <option value="0">0条（全口播）</option>
+                <option value="1" selected>1条对话</option>
+                <option value="2">2条对话</option>
+              </select>
+            </div>
+          </div>
+          <div class="frow">
+            <div class="field"><label>行业方向</label>
+              <select class="fselect" id="fInd">
+                <option value="auto" selected>自动匹配</option>
+                <option value="telecom">通信/宽带/流量</option>
+                <option value="digital">数码/电子产品</option>
+                <option value="food">美食/食品</option>
+                <option value="kids">亲子/儿童产品</option>
+                <option value="home">家居/生活用品</option>
+                <option value="edu">教育/培训</option>
+                <option value="health">健康/个护</option>
+                <option value="ecom">电商运营</option>
+              </select>
+            </div>
+            <div class="field"><label>转化目标</label>
+              <select class="fselect" id="fGoal">
+                <option value="counsel" selected>引导咨询</option>
+                <option value="coupon">引导领券</option>
+                <option value="visit">引导到店</option>
+              </select>
+            </div>
+          </div>
         </div>
-        <div id="guideContent"></div>
       </div>
     </div>
+
+    <div id="scriptList"></div>
   </div>
 
   <div class="actionbar">
-    <button class="abtn primary" id="prepGo" disabled>请完成上方三项选择</button>
+    <button class="abtn primary" id="prepGo">生成脚本</button>
   </div>
 </div>
 
@@ -459,152 +525,256 @@ function toast(msg,type){
   setTimeout(function(){t.remove()},3000);
 }
 
-/* ---------- Prep module ---------- */
-var prep={
-  step:1,
-  state:{style:null,script:'',copy:''}
-};
-function loadJSON(k){
-  try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}
-}
-function savePrep(){
-  try{localStorage.setItem('prep_draft_v1',JSON.stringify(prep.state))}catch(e){}
-}
-function fmtChars(n){return n+' 字'}
-function estSec(n){return Math.ceil(n/4)}
-function fmtDur(sec){
-  if(sec<60)return '约 '+sec+' 秒';
-  return '约 '+Math.floor(sec/60)+' 分 '+(sec%60)+' 秒';
-}
-var prep={
-  state:{scene:null,actor:null,audio:null},
-  guideHtml:''
-};
+/* ---------- Script generator module ---------- */
+var prep={draft:{},results:[]};
+var FIELDS=['fProduct','fCity','fPrice','fGate','fValid','fChan','fCrowd','fDur','fCount','fDlg','fInd','fGoal'];
 function loadJSON(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}}
-function savePrep(){try{localStorage.setItem('prep_draft_v2',JSON.stringify(prep.state))}catch(e){}}
-function allSelected(){return prep.state.scene&&prep.state.actor&&prep.state.audio}
-function initPrep(){
-  var draft=loadJSON('prep_draft_v2');
-  if(draft){
-    if(draft.scene)prep.state.scene=draft.scene;
-    if(draft.actor)prep.state.actor=draft.actor;
-    if(draft.audio)prep.state.audio=draft.audio;
+function saveDraft(){try{localStorage.setItem('prep_draft_v3',JSON.stringify(prep.draft))}catch(e){}}
+function fv(id){return (document.getElementById(id).value||'').replace(/^\s+|\s+$/g,'')}
+function detectIndustry(name){
+  var map=[
+    ['telecom',/宽带|流量|话费|电话卡|网卡|5G|WiFi|wifi|路由/],
+    ['kids',/手表|儿童|孩子|亲子|娃娃/],
+    ['food',/火锅|餐|吃|饮|奶茶|咖啡|零食|早餐/],
+    ['digital',/手机|耳机|数据线|充电|电脑|平板|数码/],
+    ['edu',/课程|辅导|学习|培训|作业|教育/],
+    ['health',/熬夜|睡眠|颈椎|口气|护肤/],
+    ['home',/干燥|油烟|马桶|收纳|家居|清洁/],
+    ['ecom',/订单|发货|库存|店铺|电商/]
+  ];
+  for(var i=0;i<map.length;i++){if(map[i][1].test(name))return map[i][0]}
+  return 'general';
+}
+
+var PAINS={
+  telecom:['月底流量总是不够用','家里宽带网速慢','打游戏延迟高被队友嫌弃','全家抢一个网谁都卡','话费里总有看不懂的扣费','搬家最烦装宽带'],
+  kids:['放学联系不上孩子','不知道孩子放学在哪','孩子玩手机上瘾','老人带孩子沟通难','就怕孩子走丢'],
+  home:['家里干得皮肤发痒','炒个菜满屋油烟呛人','衣服总是皱皱巴巴','厨房空间根本不够'],
+  food:['早上没时间做早餐','外卖吃到腻','聚餐不知道吃啥','零食吃多了不放心'],
+  digital:['手机越用越卡','耳机戴两步就掉','出门就焦虑电量','数据线三个月坏一根'],
+  edu:['孩子写作业磨蹭','辅导作业气到崩溃','孩子上课注意力差','课外班一年好几万'],
+  health:['熬夜后脸都垮了','脖子疼得抬不起','口气尴尬不敢开口','翻来覆去睡不好'],
+  ecom:['订单老是漏单错单','发货慢被客户催','赠品总忘记配','库存永远对不上','重复工作占满一天'],
+  general:['太贵了一直舍不得买','不知道怎么选','怕踩坑不敢下手','没时间研究','担心售后没人管']
+};
+var CAT_TAG={telecom:'#宽带办理',digital:'#手机数码',food:'#美食团购',kids:'#母婴亲子',home:'#家居好物',edu:'#家庭教育',health:'#健康好物',ecom:'#电商干货',general:'#本地生活'};
+var PROD_PROP={telecom:'宣传单页',digital:'真机展示',food:'产品实拍图',kids:'产品包装盒',home:'实物演示',edu:'课程资料袋',health:'产品实拍图',ecom:'手举牌（写"效率翻倍"）',general:'代金券卡片'};
+var HOT_TAGS=['#省钱攻略','#本地生活','#薅羊毛攻略'];
+var TIME_SLOTS=[['20:00','晚间黄金时段'],['11:30','午休刷屏高峰'],['17:30','下班通勤高峰']];
+var TITLE_TPL=[
+  '{city}{prod}新价来了！{price}真香｜速看',
+  '{prod}只要{price}？{city}人快冲',
+  '别再原价买{prod}了！{city}限定{price}',
+  '{city}薅到了！{prod}{price}拿下',
+  '{prod}这样办省一半，{city}专属'
+];
+
+var HOOK_NAMES=['结果型·数字反差','痛点型','悬念型','冲突型·反常识','情绪共鸣型','条件触发性','反问抛疑型','一键揭秘型','对比碾压型','痛点罗列型'];
+var HOOK_EMO=['瞪大眼睛，凑近镜头，语气夸张','皱眉，语气关切','压低声音，故作神秘','挑眉，语气不服','苦笑，摇头','指指自己，语速加快'];
+var PAIN_EMO=['皱眉，语气苦恼','翻白眼，一脸嫌弃','叹气，摇头苦笑','摊手，故作轻松'];
+var SOL_EMO=['眼睛一亮，凑近镜头微笑','拿起道具展示，语气笃定','竖起大拇指，认真脸','拍拍胸口，语气自信'];
+var CTA_EMO=['指向屏幕下方，招手','凑近镜头，笑容收住','后退一步，张开手臂'];
+var PAIN_TPL=['{p}，是不是你也天天遇到？','{p}……想想就烦','我之前也是，{p}','{p}，身边朋友没少吐槽'];
+var CTA_LINES={
+  counsel:['还有疑问评论区扣1，小助理发你详情','想了解细节，直接评论区问我'],
+  coupon:['点击下方链接，先把券领了','左下角领券，别错过这波'],
+  visit:['点定位直接到店，找店员就能办','就在你附近，到店就有惊喜']
+};
+
+function pick(a,i){return a[i%a.length]}
+function tpl(s,m){return s.replace(/\{(\w+)\}/g,function(_,k){return m[k]!==undefined?m[k]:''})}
+
+function collectCfg(){
+  var cfg={
+    product:fv('fProduct'),city:fv('fCity'),price:fv('fPrice'),
+    gate:fv('fGate')||'不限机型',valid:fv('fValid'),chan:fv('fChan')||'到店核销',
+    crow:fv('fCrowd'),dur:fv('fDur'),count:parseInt(fv('fCount'),10)||3,
+    dlg:parseInt(fv('fDlg'),10)||0,ind:fv('fInd'),goal:fv('fGoal')
+  };
+  cfg.ind=(cfg.ind==='auto')?detectIndustry(cfg.product):cfg.ind;
+  cfg.priceTxt=cfg.price||'超值价';
+  cfg.firstCity=(cfg.city.split(/[、,，\/]/)[0]||cfg.city).replace(/^\s+|\s+$/g,'');
+  return cfg;
+}
+function validateCfg(c){
+  if(!c.product){toast('请填写产品/服务','warn');document.getElementById('fProduct').focus();return false}
+  if(!c.city){toast('请填写售卖地市范围','warn');document.getElementById('fCity').focus();return false}
+  return true;
+}
+function solLines(c){
+  var a=[];
+  a.push(tpl('现在有招了！{city}的{prod}安排上',{city:c.firstCity,prod:c.product}));
+  if(c.price)a.push(tpl('{price}就能拿下，性价比拉满',{price:c.price}));
+  else a.push('这次活动力度是真的大');
+  if(c.gate&&c.gate!=='不限机型')a.push(tpl('{gate}就能办，门槛很低',{gate:c.gate}));
+  if(c.valid)a.push(tpl('{valid}前办理都来得及',{valid:c.valid}));
+  if(c.chan&&c.chan!=='到店核销')a.push(tpl('{chan}就行，方便得很',{chan:c.chan}));
+  else a.push('线上下单，到店核销就可以');
+  if(c.crow)a.push(tpl('特别适合{crow}',{crow:c.crow}));
+  return a;
+}
+function hookOpeners(c,pain){
+  var m={city:c.firstCity,prod:c.product,price:c.priceTxt};
+  return [
+    tpl('{price}拿下{prod}，今天必须说！',m),
+    tpl('还在为「{x}」发愁？',{x:pain}),
+    tpl('千万别随便办{prod}！',m),
+    tpl('谁说{prod}一定很贵？',m),
+    tpl('每次想到{x}就头大',{x:pain}),
+    '如果你也在纠结，看完这条',
+    tpl('你的{prod}真的办对了吗？',m),
+    tpl('教你一招，{prod}省一大截',m),
+    '同样预算，别人拿的比你多',
+    tpl('{prod}又贵又不值？先别划走',m)
+  ];
+}
+function sellPoints(c){
+  var s=[];
+  s.push(c.price?'价格惊喜':'超值活动');
+  if(c.gate&&c.gate!=='不限机型')s.push('低门槛');
+  s.push(c.chan&&c.chan!=='到店核销'?c.chan+'便捷':'到店核销便捷');
+  if(c.valid)s.push('有效期宽裕');
+  return s.slice(0,3).join(' / ');
+}
+function buildProps(c,i){
+  var a=[];
+  if(c.price)a.push('手写价格牌（写"'+c.price+'"）');
+  a.push(PROD_PROP[c.ind]||PROD_PROP.general);
+  a.push(pick(['二维码立牌','门店指引卡'],i));
+  return a.slice(0,3).join(' + ');
+}
+function buildPub(c,i){
+  var title=tpl(pick(TITLE_TPL,i),{city:c.firstCity,prod:c.product,price:c.priceTxt});
+  var tags=CAT_TAG[c.ind]+' #'+c.firstCity+' '+pick(HOT_TAGS,i)+' #限时特惠';
+  var d=new Date(Date.now()+i*864e5);
+  var mm=String(d.getMonth()+1);if(mm.length<2)mm='0'+mm;
+  var dd=String(d.getDate());if(dd.length<2)dd='0'+dd;
+  var slot=pick(TIME_SLOTS,i);
+  var time='推荐发布：'+d.getFullYear()+'-'+mm+'-'+dd+' '+slot[0]+'（'+slot[1]+'）';
+  return '标题：'+title+'\n话题：'+tags+'\n'+time;
+}
+function genMono(c,hookIdx,painIdx){
+  var pain=PAINS[c.ind][painIdx%PAINS[c.ind].length];
+  var hooks=hookOpeners(c,pain);
+  var L=[];
+  L.push(hooks[hookIdx%hooks.length]+'['+pick(HOOK_EMO,hookIdx)+']');
+  L.push(tpl(pick(PAIN_TPL,painIdx),{p:pain})+'['+pick(PAIN_EMO,painIdx)+']');
+  var sl=solLines(c);
+  for(var k=0;k<sl.length;k++)L.push(sl[k]+'['+pick(SOL_EMO,k)+']');
+  L.push(pick(CTA_LINES[c.goal],hookIdx)+'['+pick(CTA_EMO,hookIdx)+']');
+  return L.join('\n');
+}
+function genDialog(c,hookIdx,painIdx){
+  var pain=PAINS[c.ind][painIdx%PAINS[c.ind].length];
+  var hooks=hookOpeners(c,pain);
+  var h=hooks[hookIdx%hooks.length];
+  if(h.length>10)h=h.split(/[？！?!]/)[0]+'？';
+  var gate=(c.gate&&c.gate!=='不限机型')?c.gate:'没门槛';
+  var cta=c.goal==='coupon'?'先领券':(c.goal==='visit'?'直接到店':'扣个1');
+  var L=[
+    'A：'+h+'[瞪大眼，凑近B]',
+    'B：真的假的？[挑眉]',
+    'A：'+pain+'啊。[皱眉]',
+    'B：那可太烦了。[点头]',
+    'A：'+c.firstCity+'的'+c.product+'，'+c.priceTxt+'就行。[淡定摆手]',
+    'B：这么香？[瞪大眼]',
+    'A：'+gate+'，随时能办。[语气笃定]',
+    'B：行，我信你。[拍板]',
+    'A：记得'+cta+'哦。[指镜头下方]',
+    'B：走起！[比耶]'
+  ];
+  return L.join('\n');
+}
+function generate(){
+  var c=collectCfg();
+  if(!validateCfg(c))return;
+  if(c.dlg>=c.count){c.dlg=c.count-1;toast('对话条数已调整为 '+c.dlg+' 条','warn')}
+  var starts=[0,2,7,9,5,3];
+  var h=starts[Math.floor(Math.random()*starts.length)];
+  var out=[];
+  for(var i=0;i<c.count;i++){
+    var form=i<c.dlg?'对话':'口播';
+    var body=form==='对话'?genDialog(c,(h+i)%10,i):genMono(c,(h+i)%10,i);
+    var props=buildProps(c,i);
+    var head='文案'+(i+1)+' · 钩子类型：'+HOOK_NAMES[(h+i)%10]+' · 形式：'+form;
+    out.push({
+      head:head,body:body,sell:sellPoints(c),props:props,
+      pub:buildPub(c,i),
+      prompter:'—— '+head+' ——\n【道具】'+props+'\n\n'+body
+    });
   }
-  bindGrid('sceneGrid');
-  bindGrid('modeGrid');
-  bindGrid('audioGrid');
-  restoreSel('sceneGrid',prep.state.scene);
-  restoreSel('modeGrid',prep.state.actor);
-  restoreSel('audioGrid',prep.state.audio);
-  if(allSelected()){showGuide()}
-  updateGoBtn();
-  $('prepBack').addEventListener('click',function(){switchView('home')});
-  $('prepGo').addEventListener('click',goShoot);
-  $('regenBtn').addEventListener('click',function(){
-    prep.state.scene=prep.state.actor=prep.state.audio=null;
-    savePrep();
-    clearSel('sceneGrid');clearSel('modeGrid');clearSel('audioGrid');
-    $('guideResult').classList.add('hide');
-    updateGoBtn();
-  });
+  renderResults(out);
+  toast('已生成 '+out.length+' 条脚本','good');
 }
-function bindGrid(gridId){
-  var btns=document.querySelectorAll('#'+gridId+' .opt');
-  for(var i=0;i<btns.length;i++){
-    (function(btn){
-      btn.addEventListener('click',function(){
-        var k=btn.getAttribute('data-k'),v=btn.getAttribute('data-v');
-        if(prep.state[k]===v)return;
-        var cur=document.querySelector('#'+gridId+' .opt.sel');
-        if(cur)cur.classList.remove('sel');
-        btn.classList.add('sel');
-        prep.state[k]=v;
-        savePrep();
-        if(allSelected())showGuide();
-        updateGoBtn();
-      });
-    })(btns[i]);
-  }
-}
-function restoreSel(gridId,val){
-  if(!val)return;
-  var btn=document.querySelector('#'+gridId+' .opt[data-v="'+val+'"]');
-  if(btn)btn.classList.add('sel');
-}
-function clearSel(gridId){
-  var cur=document.querySelector('#'+gridId+' .opt.sel');
-  if(cur)cur.classList.remove('sel');
-}
-function updateGoBtn(){
-  var b=$('prepGo');
-  if(!allSelected()){b.disabled=true;b.textContent='请完成上方三项选择'}
-  else{b.disabled=false;b.textContent='带入提词器 · 去拍摄'}
-}
-function showGuide(){
-  prep.guideHtml=buildGuide();
-  $('guideContent').innerHTML=prep.guideHtml;
-  $('guideResult').classList.remove('hide');
-  updateGoBtn();
-}
-function goShoot(){
-  if(!allSelected()){toast('请先完成上方三项选择','warn');return}
-  savePrep();
-  var prompt='【拍摄指导清单】\n'+prep.guideHtml.replace(/<[^>]+>/g,'').replace(/\n\s*\n/g,'\n');
-  try{localStorage.setItem('kz_prompter_text',prompt)}catch(e){}
-  PENDING_PROMPT=prompt;
-  switchView('cam');
-  toast('指导清单已带入提词器','good');
-}
-function buildGuide(){
-  var s=prep.state.scene,a=prep.state.actor,au=prep.state.audio;
-  var sceneLabel=s==='indoor'?'室内拍摄':'室外拍摄';
-  var actorLabel=a==='single'?'单人出镜':'双人出镜';
-  var audioLabel=au==='phone'?'手机自带收声':'小蜜蜂/耳机收声';
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function renderResults(list){
+  prep.results=list;
+  var box=document.getElementById('scriptList');
   var html='';
-  html+='<div style="margin-bottom:12px"><b>您的选择：</b> '+sceneLabel+' · '+actorLabel+' · '+audioLabel+'</div>';
-  // A. 手机硬件调试与使用
-  html+='<div style="margin-top:16px;padding:12px;background:rgba(0,229,255,.08);border-radius:10px;border:1px solid rgba(0,229,255,.2)">';
-  html+='<div style="font-weight:600;color:#7ff6ff;margin-bottom:8px">A. 手机硬件调试与使用 <span style="font-weight:400;font-size:12px;color:#8fb3c7">('+sceneLabel+')</span></div>';
-  html+='<div style="font-size:13px;color:#cfe4f0;line-height:1.9">'+getPhoneGuide(s)+'</div>';
-  html+='</div>';
-  // B. 被拍摄者注意事项
-  html+='<div style="margin-top:16px;padding:12px;background:rgba(255,200,87,.08);border-radius:10px;border:1px solid rgba(255,200,87,.2)">';
-  html+='<div style="font-weight:600;color:#ffd987;margin-bottom:8px">B. 被拍摄者注意事项 <span style="font-weight:400;font-size:12px;color:#8fb3c7">('+actorLabel+')</span></div>';
-  html+='<div style="font-size:13px;color:#cfe4f0;line-height:1.9">'+getActorGuide(a)+'</div>';
-  html+='</div>';
-  // C. 音频降噪提示
-  html+='<div style="margin-top:16px;padding:12px;background:rgba(61,255,160,.08);border-radius:10px;border:1px solid rgba(61,255,160,.2)">';
-  html+='<div style="font-weight:600;color:#7dffaa;margin-bottom:8px">C. 音频降噪提示 <span style="font-weight:400;font-size:12px;color:#8fb3c7">('+audioLabel+')</span></div>';
-  html+='<div style="font-size:13px;color:#cfe4f0;line-height:1.9">'+getAudioGuide(au)+'</div>';
-  html+='</div>';
-  // 步骤2 提示
-  html+='<div style="margin-top:16px;padding:12px;background:rgba(255,255,255,.04);border-radius:10px;border:1px dashed rgba(147,170,190,.3)">';
-  html+='<div style="font-weight:600;color:#fff;margin-bottom:8px">下一步：拍摄前最终检查（步骤2）</div>';
-  html+='<div style="font-size:13px;color:#cfe4f0;line-height:1.9">设备最终检查（收音麦测试/补光灯/勿扰模式）<br>出镜人最终确认（着装/脚本/走位）<br>场景最终检查（背景/光线/室内关音乐/室外防风噪）<br>参数最终确认（九宫格/美颜/1080P/对焦锁定）</div>';
-  html+='</div>';
-  return html;
-}
-function getPhoneGuide(s){
-  var base='<b>通用调试：</b> 电量充足/存储空间/镜头清洁/开启勿扰/九宫格辅助/关闭美颜/1080P 30fps/开启防抖/对焦锁定/曝光调节。';
-  if(s==='indoor'){
-    return base+'<br><br><b>室内专属：</b> 准备补光灯/避开头顶日光灯直射/设置白平衡/关闭背景音乐/避免混响大的空间。';
-  }else{
-    return base+'<br><br><b>室外专属：</b> 选阴影处拍摄/避开正午直射/面朝光源/屏幕亮度调最高/小蜜蜂加防风毛套/防手机过热遮阴。';
+  for(var i=0;i<list.length;i++){
+    var parts=list[i].head.split(' · ');
+    html+='<div class="scard">'
+      +'<div class="scardHead"><b>文案'+(i+1)+'</b>'
+      +'<span class="stag cy">'+esc(parts[1]||'')+'</span>'
+      +'<span class="stag">'+esc(parts[2]||'')+'</span></div>'
+      +'<div class="stext">'+esc(list[i].body)+'</div>'
+      +'<div style="margin-top:9px;font-size:12px;color:#ffd987">（卖点：'+esc(list[i].sell)+'）</div>'
+      +'<div style="margin-top:5px;font-size:12px;color:#b9d4e4">[道具建议] '+esc(list[i].props)+'</div>'
+      +'<div class="pubbox">'+esc('【发布信息】\n'+list[i].pub)+'</div>'
+      +'<div class="sfoot">'
+      +'<button class="abtn primary" data-shoot="'+i+'">带入提词器 · 去拍摄</button>'
+      +'<button class="abtn ghost slim" data-copy="'+i+'">复制全文</button>'
+      +'</div></div>';
+  }
+  box.innerHTML=html;
+  var btns=box.querySelectorAll('[data-shoot]');
+  for(var j=0;j<btns.length;j++){
+    btns[j].addEventListener('click',function(){goShoot(this.getAttribute('data-shoot'))});
+  }
+  var cps=box.querySelectorAll('[data-copy]');
+  for(var k=0;k<cps.length;k++){
+    cps[k].addEventListener('click',function(){copyScript(this.getAttribute('data-copy'))});
   }
 }
-function getActorGuide(a){
-  if(a==='single'){
-    return '<b>单人出镜：</b> 站位居中/头顶留白(黄金分割线)/拍摄距离1.5-2米/双脚自然分开/上半身微前倾/目光看镜头/语速适中/手势自然配合台词。';
-  }else{
-    return '<b>双人出镜：</b> 并排站位/间距约一臂长/拍摄距离2-2.5米/互动眼神交流/说话轮流不抢话/收音麦一人一只/两人着装风格协调/高度差不大。';
-  }
+function goShoot(i){
+  var r=prep.results[i];if(!r)return;
+  try{localStorage.setItem('kz_prompter_text',r.prompter)}catch(e){}
+  PENDING_PROMPT=r.prompter;
+  saveDraft();
+  switchView('cam');
+  toast('脚本已带入提词器','good');
 }
-function getAudioGuide(au){
-  if(au==='phone'){
-    return '<b>手机自带收声：</b> 后期需做音频降噪处理/拍摄时务必选安静环境/靠近手机20-30cm大声清晰说/避免空调/风扇/人声嘈杂背景。';
-  }else{
-    return '<b>小蜜蜂/耳机收声：</b> 后期无需降噪/拍摄前确认电量充足/信号稳定/发射器贴身隐藏/接收器插稳手机/测试收音清晰无电流声。';
+function copyScript(i){
+  var r=prep.results[i];if(!r)return;
+  var full=r.head+'\n\n'+r.body+'\n\n（卖点：'+r.sell+'）\n\n[道具建议] '+r.props+'\n\n【发布信息】\n'+r.pub;
+  var done=function(){toast('已复制完整脚本','good')};
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(full).then(done,function(){fallbackCopy(full);done()});
+  }else{fallbackCopy(full);done()}
+}
+function fallbackCopy(t){
+  var ta=document.createElement('textarea');
+  ta.value=t;ta.style.position='fixed';ta.style.opacity='0';
+  document.body.appendChild(ta);ta.select();
+  try{document.execCommand('copy')}catch(e){}
+  ta.remove();
+}
+function initPrep(){
+  var draft=loadJSON('prep_draft_v3');
+  for(var i=0;i<FIELDS.length;i++){
+    (function(id){
+      var el=document.getElementById(id);
+      el.addEventListener('change',function(){prep.draft[id]=el.value;saveDraft()});
+      if(draft&&draft[id])el.value=draft[id];
+    })(FIELDS[i]);
   }
+  document.getElementById('moreBtn').addEventListener('click',function(){
+    var b=document.getElementById('moreBox');
+    var open=b.classList.toggle('open');
+    this.textContent=open?'收起更多设置 ▴':'展开更多设置 ▾';
+  });
+  document.getElementById('prepBack').addEventListener('click',function(){switchView('home')});
+  document.getElementById('prepGo').addEventListener('click',generate);
 }
 
 /* ---------- Camera module ---------- */
