@@ -249,11 +249,12 @@ html,body{width:100%;height:100%;overflow:hidden;position:fixed;inset:0;backgrou
           <span class="hbadge">可用</span>
           <span class="harrow">›</span>
         </div>
-        <div class="hcard dim" data-go="edit">
-          <div class="hicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><path d="M8.2 7.8L20 19M8.2 16.2L20 5"/></svg></div>
-          <div class="htxt"><b>视频剪辑</b><span>裁剪 · 字幕 · 配乐 · 一键成片导出</span></div>
-          <span class="hbadge off">敬请期待</span>
-        </div>
+<div class="hcard" data-go="edit" onclick="guideToPrep()">
+  <div class="hicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><path d="M8.2 7.8L20 19M8.2 16.2L20 5"/></svg></div>
+  <div class="htxt"><b>视频剪辑</b><span>裁剪 · 字幕 · 配乐 · 一键成片导出</span></div>
+  <span class="hbadge off">请从第一步开始</span>
+  <span class="harrow">›</span>
+</div>
       </div>
       <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br>板块①脚本为本地模板生成，可对接技能后端升级为 AI 生成</div>
     </div>
@@ -508,6 +509,12 @@ var S={
 };
 var PENDING_PROMPT=null;
 var LAST_SHOT=null;
+
+/* 引导用户从第一步开始 */
+function guideToPrep(){
+  toast('请先完成「脚本创作」与「拍摄视频」，素材会自动带入剪辑台','warn');
+  switchView('prep');
+}
 
 /* ---------- Router ---------- */
 var ROUTES=['home','prep','edit','cam'];
@@ -828,6 +835,11 @@ function speak(msg,key){
   }
   speechSynthesis.speak(u);
 }
+/* 立即播报（倒计时/严重倾斜等紧急提示） */
+function speakNow(msg,key){
+  lastSpeakKey='';lastSpeakTime=0;
+  speak(msg,key);
+}
 
 function warnOnce(key,msg,type,ms){
   var now=Date.now();
@@ -1016,7 +1028,7 @@ function updateTiltHUD(){
     type='warn';
   }
   if(msg){showWarn('warnTilt',msg,type);S.tiltBad=true;
-    if(type==='bad')speak(msg,'tilt');
+    if(type==='bad')speakNow(msg,'tilt');  // 严重倾斜立即语音播报
   }
   else if(S.tiltBad){S.tiltBad=false;showWarn('warnTilt','手机水平正常','good',1200)}
 }
@@ -1341,6 +1353,7 @@ function renderEdit(){
   if(LAST_SHOT.kind==='photo'){
     $('editPreviewMedia').outerHTML='<img id="editPreviewMedia" src="'+LAST_SHOT.url+'" alt="">';
     $('editSynthOverlay').classList.add('hide');
+    $('editSynthStatus').classList.add('hide');
     $('editSaveBtn').disabled=false;
     $('editShotInfo').textContent='照片素材已就绪，可直接保存';
     return;
@@ -1356,7 +1369,7 @@ function renderEdit(){
   $('editSynthStatus').classList.remove('hide');
   $('editSaveBtn').disabled=true;
   $('editSynthBar').style.width='0%';
-  $('editSynthText').textContent='正在合成成片...';
+  $('editSynthText').textContent='正在合成成片... 0%';
 
   var segs=window._shootSegments||[];
   var info=window._shootScriptInfo||{};
@@ -1367,10 +1380,12 @@ function renderEdit(){
     $('editSaveBtn').disabled=false;
     return;
   }
+  var startTime=Date.now();
   composeFinalClip(LAST_SHOT,segs,info,function(prog){
     var pct=Math.round(prog*100);
+    var elapsed=((Date.now()-startTime)/1000).toFixed(1);
     $('editSynthBar').style.width=pct+'%';
-    if(pct>=100){$('editSynthText').textContent='合成完成，正在生成下载链接...';}
+    $('editSynthText').textContent='正在合成成片... '+pct+'% ('+elapsed+'s)';
   }).then(function(finalUrl){
     LAST_SHOT.finalUrl=finalUrl;
     media.src=finalUrl;
@@ -1795,7 +1810,6 @@ function loop(){
   }
   $('editBack').addEventListener('click',function(){switchView('home')});
   $('editHomeBtn').addEventListener('click',function(){switchView('home')});
-  $('editHomeBtn2').addEventListener('click',function(){switchView('home')});
   $('editSaveBtn').addEventListener('click',function(){
     var clip=LAST_SHOT;if(!clip)return;
     var url=clip.finalUrl||clip.url;
