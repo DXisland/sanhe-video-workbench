@@ -178,6 +178,7 @@ html,body{width:100%;height:100%;overflow:hidden;position:fixed;inset:0;backgrou
 #shutter:disabled{opacity:.35;pointer-events:none}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
 @keyframes pop{from{transform:translateY(-8px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
 
 #prompter{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top) + 48px);z-index:3;height:44vh;display:none;flex-direction:column;margin:0 10px;border-radius:12px;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.1);overflow:hidden;touch-action:none}
 #prompter.on{display:flex}
@@ -369,10 +370,26 @@ html,body{width:100%;height:100%;overflow:hidden;position:fixed;inset:0;backgrou
       <button class="abtn primary" id="editHomeBtn" style="width:100%">返回首页</button>
     </div>
     <div class="editcard hide" id="editHasShot">
-      <h3>素材已就绪</h3>
-      <p id="editShotInfo"></p>
-      <div class="preview" id="editPreview"><video id="editPreviewMedia" controls playsinline muted></video></div>
-      <button class="abtn primary" id="editHomeBtn2" style="width:100%">返回首页</button>
+      <div class="flex items-center justify-between mb-4">
+        <h3 style="font-size:16px;font-weight:700;color:#eafcff">成片合成</h3>
+        <span id="editSynthStatus" class="text-xs text-stone-400 hidden">合成中...</span>
+      </div>
+      <p id="editShotInfo" style="font-size:12px;color:#7fa8bd;margin-bottom:12px"></p>
+      <div class="preview" id="editPreview" style="position:relative">
+        <video id="editPreviewMedia" controls playsinline style="width:100%;height:auto;border-radius:12px;background:#000"></video>
+        <div id="editSynthOverlay" class="hide" style="position:absolute;inset:0;background:rgba(4,7,13,.9);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;border-radius:12px;z-index:10">
+          <div style="width:40px;height:40px;border:3px solid rgba(0,229,255,.2);border-top-color:#00e5ff;border-radius:50%;animation:spin .8s linear infinite"></div>
+          <div style="color:#9feaff;font-size:14px;font-weight:600" id="editSynthText">正在合成成片...</div>
+          <div style="width:80%;height:4px;background:rgba(147,170,190,.2);border-radius:2px;overflow:hidden">
+            <div id="editSynthBar" style="width:0%;height:100%;background:linear-gradient(90deg,#00e5ff,#4d9dff);transition:width .3s"></div>
+          </div>
+        </div>
+      </div>
+      <div class="flex gap-8 mt-4" style="flex-wrap:wrap">
+        <button class="abtn primary" id="editSaveBtn" style="flex:1;min-width:140px" disabled>保存成片</button>
+        <button class="abtn ghost" id="editRetakeBtn" style="flex:1;min-width:140px">重拍</button>
+        <button class="abtn ghost" id="editRestartBtn" style="flex:1;min-width:140px">重新配置</button>
+      </div>
     </div>
   </div>
 </div>
@@ -749,6 +766,9 @@ function goShoot(i){
   var r=prep.results[i];if(!r)return;
   try{localStorage.setItem('kz_prompter_text',r.prompter)}catch(e){}
   PENDING_PROMPT=r.prompter;
+  /* 准备合成用的脚本片段与信息 */
+  window._shootSegments=parseScriptToSegments(r.body);
+  window._shootScriptInfo={title:r.title};
   saveDraft();
   switchView('cam');
   toast('脚本已带入提词器','good');
@@ -1320,15 +1340,52 @@ function renderEdit(){
   var media=$('editPreviewMedia');
   if(LAST_SHOT.kind==='photo'){
     $('editPreviewMedia').outerHTML='<img id="editPreviewMedia" src="'+LAST_SHOT.url+'" alt="">';
-  }else{
-    if(media.tagName!=='VIDEO'){
-      $('editPreviewMedia').outerHTML='<video id="editPreviewMedia" controls playsinline muted></video>';
-      media=$('editPreviewMedia');
-    }
-    media.src=LAST_SHOT.url;
-    media.setAttribute('playsinline','');
+    $('editSynthOverlay').classList.add('hide');
+    $('editSaveBtn').disabled=false;
+    $('editShotInfo').textContent='照片素材已就绪，可直接保存';
+    return;
   }
-  $('editShotInfo').textContent=LAST_SHOT.kind==='photo'?'照片素材已带入，剪辑功能开放后可继续加工':'视频素材已带入，时长以拍摄为准，剪辑功能开放后可继续加工';
+  if(media.tagName!=='VIDEO'){
+    $('editPreviewMedia').outerHTML='<video id="editPreviewMedia" controls playsinline style="width:100%;height:auto;border-radius:12px;background:#000"></video>';
+    media=$('editPreviewMedia');
+  }
+  media.src=LAST_SHOT.url;
+  media.setAttribute('playsinline','');
+  $('editShotInfo').textContent='视频素材已就绪，正在自动合成标题+字幕成片...';
+  $('editSynthOverlay').classList.remove('hide');
+  $('editSynthStatus').classList.remove('hide');
+  $('editSaveBtn').disabled=true;
+  $('editSynthBar').style.width='0%';
+  $('editSynthText').textContent='正在合成成片...';
+
+  var segs=window._shootSegments||[];
+  var info=window._shootScriptInfo||{};
+  if(segs.length===0){
+    $('editSynthText').textContent='未检测到脚本片段，仅保存原始视频';
+    $('editSynthOverlay').classList.add('hide');
+    $('editSynthStatus').classList.add('hide');
+    $('editSaveBtn').disabled=false;
+    return;
+  }
+  composeFinalClip(LAST_SHOT,segs,info,function(prog){
+    var pct=Math.round(prog*100);
+    $('editSynthBar').style.width=pct+'%';
+    if(pct>=100){$('editSynthText').textContent='合成完成，正在生成下载链接...';}
+  }).then(function(finalUrl){
+    LAST_SHOT.finalUrl=finalUrl;
+    media.src=finalUrl;
+    $('editSynthOverlay').classList.add('hide');
+    $('editSynthStatus').classList.add('hide');
+    $('editSaveBtn').disabled=false;
+    $('editShotInfo').textContent='成片已合成（含标题+逐句字幕），可直接保存到相册';
+    toast('成片合成完成','good');
+  }).catch(function(err){
+    $('editSynthOverlay').classList.add('hide');
+    $('editSynthStatus').classList.add('hide');
+    $('editSaveBtn').disabled=false;
+    $('editShotInfo').textContent='合成失败，将保存原始视频：'+(err.message||err);
+    toast('合成失败，保存原始视频','warn');
+  });
 }
 function teardownCam(){
   if(S.recording){try{stopRecord()}catch(e){}}
@@ -1366,7 +1423,183 @@ function teardownCam(){
   $('errCard').style.display='none';$('errCard').textContent='';
 }
 
-/* Events */
+/* ===== 合成核心：Canvas叠加标题+字幕+音频提取 (from shop-video-shooter) ===== */
+/* 关键词高亮列表 */
+var SUBTITLE_KEYWORDS=['江西','400','是真的','华为','真实有效','50抵400','1元','9块9','59','99','360','划算','省钱','优惠','补贴','小天才','手机','宽带','团购','代金券','手表','九江','南昌','赣州','上饶','宜春','吉安','抚州','萍乡','新余','鹰潭','景德镇'];
+
+/* 文字自动换行 */
+function wrapText(ctx,text,maxChars){
+  if(!text)return[];
+  var sentences=text.split(/([，。！？，！？])/).filter(function(s){return s.length>0});
+  var result=[],current='';
+  for(var i=0;i<sentences.length;i++){
+    var s=sentences[i];
+    if((current+s).length<=maxChars){current+=s;}
+    else{
+      if(current)result.push(current);
+      if(s.length>maxChars){
+        for(var j=0;j<s.length;j+=maxChars)result.push(s.substr(j,maxChars));
+        current='';
+      }else{current=s;}
+    }
+  }
+  if(current)result.push(current);
+  return result;
+}
+
+/* 绘制大标题：亮黄#FFD700+粗黑描边，上1/3区域 */
+function drawTitle(ctx,w,h,title){
+  if(!title)return;
+  var fontSize=Math.round(h*0.07);
+  var strokeW=Math.round(fontSize*0.18);
+  ctx.save();
+  ctx.font='900 '+fontSize+'px "PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
+  ctx.textAlign='center';ctx.textBaseline='top';
+  var x=w/2;
+  var titleLines=title.split('\n');
+  if(titleLines.length===1){
+    var maxChars=Math.floor(w*0.85/fontSize);
+    if(title.length>maxChars){
+      var mid=Math.ceil(title.length/2);
+      titleLines=[title.substring(0,mid),title.substring(mid)];
+    }
+  }
+  var startY=Math.round(h*0.06);
+  var lineHeight=fontSize*1.15;
+  titleLines.forEach(function(line,idx){
+    var y=startY+idx*lineHeight;
+    ctx.lineWidth=strokeW;ctx.strokeStyle='#000000';ctx.lineJoin='round';ctx.miterLimit=2;
+    for(var a=0;a<Math.PI*2;a+=Math.PI/4)ctx.strokeText(line,x,y);
+    ctx.fillStyle='#FFD700';ctx.fillText(line,x,y);
+  });
+  ctx.restore();
+}
+
+/* 绘制字幕：底部安全区，白字/关键词黄色+粗黑描边，最多2行 */
+function drawSubtitle(ctx,w,h,text){
+  if(!text)return;
+  var fontSize=Math.round(h*0.055);
+  var strokeW=Math.round(fontSize*0.15);
+  ctx.save();
+  ctx.font='900 '+fontSize+'px "PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
+  ctx.textAlign='center';ctx.textBaseline='bottom';
+  var maxChars=Math.floor(w*0.82/fontSize);
+  var lines=wrapText(ctx,text,maxChars);
+  if(lines.length>2){
+    lines=lines.slice(0,2);
+    lines[1]=lines[1].replace(/[。！？!?，,、；;：:…]+$/,'')+'\u2026';
+  }
+  var lineHeight=fontSize*1.3;
+  var totalH=lines.length*lineHeight;
+  var startY=h-Math.round(h*0.08)-totalH+lineHeight;
+  var x=w/2;
+  lines.forEach(function(line,idx){
+    var y=startY+idx*lineHeight;
+    ctx.lineWidth=strokeW;ctx.strokeStyle='#000000';ctx.lineJoin='round';ctx.miterLimit=2;
+    for(var a=0;a<Math.PI*2;a+=Math.PI/4)ctx.strokeText(line,x,y);
+    var hasKw=false;for(var k=0;k<SUBTITLE_KEYWORDS.length;k++){if(line.indexOf(SUBTITLE_KEYWORDS[k])>=0){hasKw=true;break;}}
+    ctx.fillStyle=hasKw?'#FFD700':'#ffffff';ctx.fillText(line,x,y);
+  });
+  ctx.restore();
+}
+
+/* 主合成函数：返回 Promise(url) */
+function composeFinalClip(clip, segments, scriptInfo, onProgress){
+  return new Promise(function(resolve,reject){
+    if(!clip||!clip.url){reject(new Error('no clip'));return;}
+    var subtitleLines=segments.map(function(s){return (s.line||'').trim();}).filter(function(l){return !!l;});
+    var bigTitle=scriptInfo&&scriptInfo.title?scriptInfo.title:'';
+    var video=document.createElement('video');
+    video.src=clip.url;video.playsInline=true;
+    var audioCtx=null,sourceNode=null,gainNode=null,audioDest=null,composeStarted=false;
+    function initAudio(){
+      try{
+        audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+        sourceNode=audioCtx.createMediaElementSource(video);
+        audioDest=audioCtx.createMediaStreamDestination();
+        gainNode=audioCtx.createGain();gainNode.gain.value=0;
+        sourceNode.connect(audioDest);sourceNode.connect(gainNode);gainNode.connect(audioCtx.destination);
+      }catch(e){audioCtx=null;}
+    }
+    function startCompose(){
+      if(composeStarted)return;composeStarted=true;
+      var vw=video.videoWidth||640,vh=video.videoHeight||480;
+      var duration=video.duration;
+      if(!duration||!isFinite(duration)||duration<=0)duration=parseFloat(clip.duration)||10;
+      var canvas=document.createElement('canvas');canvas.width=vw;canvas.height=vh;
+      var ctx=canvas.getContext('2d');
+      var stream=canvas.captureStream(30);
+      if(audioDest&&audioDest.stream){
+        var aTracks=audioDest.stream.getAudioTracks();
+        for(var ai=0;ai<aTracks.length;ai++)stream.addTrack(aTracks[ai]);
+      }
+      var mimeType=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'].find(function(t){try{return MediaRecorder.isTypeSupported(t)}catch(e){return false}})||'';
+      var recorder;try{recorder=mimeType?new MediaRecorder(stream,{mimeType:mimeType}):new MediaRecorder(stream);}catch(e){recorder=new MediaRecorder(stream);}
+      var chunks=[];recorder.ondataavailable=function(e){if(e.data&&e.data.size>0)chunks.push(e.data);};
+      recorder.onstop=function(){
+        if(audioCtx&&audioCtx.state!=='closed'){try{audioCtx.close();}catch(e){}}
+        var blob=new Blob(chunks,{type:(chunks[0]&&chunks[0].type)||'video/webm'});
+        var url=URL.createObjectURL(blob);resolve(url);
+      };
+      /* 字幕时间线：按字数比例分配，总时长90%，开头留10%缓冲，每句结束即消失 */
+      var subTimeline=[];
+      if(subtitleLines.length>0){
+        var totalChars=subtitleLines.reduce(function(sum,l){return sum+l.length;},0);
+        if(totalChars<=0)totalChars=subtitleLines.length;
+        var subTotal=duration*0.9;if(subTotal>duration-0.5)subTotal=duration-0.5;
+        var accTime=duration-subTotal;
+        for(var si=0;si<subtitleLines.length;si++){
+          var ratio=subtitleLines[si].length/totalChars;
+          var segDur=subTotal*ratio;
+          subTimeline.push({text:subtitleLines[si],start:accTime,end:accTime+segDur});accTime+=segDur;
+        }
+      }
+      var finished=false;
+      function drawFrame(){
+        if(finished)return;
+        var ct=video.currentTime;
+        var ended=video.ended||(video.paused&&ct>=duration-0.05)||ct>=duration-0.05;
+        if(ended){finished=true;ctx.drawImage(video,0,0,vw,vh);if(recorder.state==='recording')recorder.stop();return;}
+        ctx.drawImage(video,0,0,vw,vh);
+        if(bigTitle)drawTitle(ctx,vw,vh,bigTitle);
+        var cur='';for(var ti=0;ti<subTimeline.length;ti++){if(ct>=subTimeline[ti].start&&ct<subTimeline[ti].end){cur=subTimeline[ti].text;break;}}
+        if(cur)drawSubtitle(ctx,vw,vh,cur);
+        if(onProgress)onProgress(Math.min(1,ct/duration));
+        requestAnimationFrame(drawFrame);
+      }
+      recorder.start(200);
+      var playFunc=function(){
+        video.play().then(function(){if(onProgress)onProgress(0);drawFrame();}).catch(function(e){reject(e);});
+      };
+      if(audioCtx&&audioCtx.state==='suspended'){audioCtx.resume().then(playFunc);}else{playFunc();}
+    }
+    video.onloadeddata=function(){
+      if(!audioCtx)initAudio();
+      setTimeout(startCompose,100);
+    };
+    var fallback=setTimeout(function(){if(video.readyState>=2&&!composeStarted){if(!audioCtx)initAudio();startCompose();}},3000);
+    video.onerror=function(){clearTimeout(fallback);reject(new Error('video load fail'));};
+  });
+}
+
+/* 把脚本文本拆成 _shootSegments 格式 */
+function parseScriptToSegments(text){
+  var segs=[];
+  var splitSentences=function(t){return t.split(/(?<=[。！？；!?；])|\n/).map(function(s){return s.trim();}).filter(function(s){return s.length>0;});};
+  var lines=text.split('\n');
+  lines.forEach(function(line){
+    var clean=line.replace(/^[AB]\uFF1A/,'').trim();if(!clean)return;
+    var isA=line.startsWith('A\uFF1A'),isB=line.startsWith('B\uFF1A');
+    var sentences=splitSentences(clean);
+    if(sentences.length>0){
+      sentences.forEach(function(sentence){
+        segs.push({shot:isA?'出镜讲述':isB?'画外质疑':'出镜讲述',tip:isA?'面对镜头，语气自然':isB?'可后期配音':'面对镜头',line:sentence});
+      });
+    }else{segs.push({shot:isA?'出镜讲述':isB?'画外质疑':'出镜讲述',tip:isA?'面对镜头，语气自然':isB?'可后期配音':'面对镜头',line:clean});}
+  });
+  if(segs.length===0)segs.push({shot:'出镜讲述',tip:'面对镜头',line:text});
+  return segs;
+}
 document.addEventListener('touchmove',function(e){
   var el=e.target;
   if(el&&(el.tagName==='VIDEO'||(el.closest&&el.closest('#cam,#cover,#prompter,#view-home,#view-prep,#view-edit'))))return;
@@ -1563,6 +1796,23 @@ function loop(){
   $('editBack').addEventListener('click',function(){switchView('home')});
   $('editHomeBtn').addEventListener('click',function(){switchView('home')});
   $('editHomeBtn2').addEventListener('click',function(){switchView('home')});
+  $('editSaveBtn').addEventListener('click',function(){
+    var clip=LAST_SHOT;if(!clip)return;
+    var url=clip.finalUrl||clip.url;
+    var a=document.createElement('a');a.href=url;
+    a.download='成片_'+new Date().toLocaleString('zh-CN',{hour12:false}).replace(/[/:\s]/g,'-')+'.webm';
+    a.click();toast('已开始保存成片','good');
+  });
+  $('editRetakeBtn').addEventListener('click',function(){
+    var old=LAST_SHOT;if(old){if(old.url)URL.revokeObjectURL(old.url);if(old.finalUrl&&old.finalUrl!==old.url)URL.revokeObjectURL(old.finalUrl);}
+    LAST_SHOT=null;window._shootSegments=[];window._shootScriptInfo={};
+    switchView('cam');showPrepPhase();startShootCamera();updateShootGuide();
+  });
+  $('editRestartBtn').addEventListener('click',function(){
+    var old=LAST_SHOT;if(old){if(old.url)URL.revokeObjectURL(old.url);if(old.finalUrl&&old.finalUrl!==old.url)URL.revokeObjectURL(old.finalUrl);}
+    LAST_SHOT=null;window._shootSegments=[];window._shootScriptInfo={};
+    switchView('home');
+  });
   initPrep();
 })();
 requestAnimationFrame(loop);
