@@ -533,6 +533,7 @@ function switchView(name,push){
     teardownCam();
   }
   if(name==='edit')renderEdit();
+  if(name==='prep')initPrep();
   if(push!==false){
     suppressHash=true;
     if(location.hash!=='#'+name)location.hash=name;
