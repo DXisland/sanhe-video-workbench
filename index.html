@@ -302,10 +302,6 @@ html,body{width:100%;height:100%;overflow:hidden;position:fixed;inset:0;backgrou
             <div class="field"><label>有效期</label><input class="finput" id="fValid" placeholder="如：本月内有效"></div>
           </div>
           <div class="frow">
-            <div class="field"><label>渠道限定</label><input class="finput" id="fChan" placeholder="默认到店核销"></div>
-            <div class="field"><label>目标人群</label><input class="finput" id="fCrowd" placeholder="留空自动推断"></div>
-          </div>
-          <div class="frow">
             <div class="field"><label>生成数量 N</label>
               <select class="fselect" id="fCount">
                 <option value="1">1条</option>
@@ -555,7 +551,7 @@ function switchView(name,push){
       prepGo.onclick=generate;
     }
     // 绑定字段变化监听器
-    var FIELDS=['fProduct','fCity','fPrice','fGate','fValid','fChan','fCrowd','fDur','fCount','fDlg','fInd','fGoal'];
+var FIELDS=['fProduct','fCity','fPrice','fGate','fValid','fDur','fCount','fDlg','fInd','fGoal'];
     for(var i=0;i<FIELDS.length;i++){
       (function(id){
         var el=document.getElementById(id);
@@ -595,7 +591,7 @@ function toast(msg,type){
 
 /* ---------- Script generator module ---------- */
 var prep={draft:{},results:[]};
-var FIELDS=['fProduct','fCity','fPrice','fGate','fValid','fChan','fCrowd','fDur','fCount','fDlg','fInd','fGoal'];
+var FIELDS=['fProduct','fCity','fPrice','fGate','fValid','fDur','fCount','fDlg','fInd','fGoal'];
 function loadJSON(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}}
 function saveDraft(){try{localStorage.setItem('prep_draft_v3',JSON.stringify(prep.draft))}catch(e){}}
 function fv(id){return (document.getElementById(id).value||'').replace(/^\s+|\s+$/g,'')}
@@ -655,8 +651,8 @@ function tpl(s,m){return s.replace(/\{(\w+)\}/g,function(_,k){return m[k]!==unde
 function collectCfg(){
   var cfg={
     product:fv('fProduct'),city:fv('fCity'),price:fv('fPrice'),
-    gate:fv('fGate')||'不限机型',valid:fv('fValid'),chan:fv('fChan')||'到店核销',
-    crow:fv('fCrowd'),dur:fv('fDur'),count:parseInt(fv('fCount'),10)||3,
+    gate:fv('fGate')||'不限机型',valid:fv('fValid'),
+    dur:fv('fDur'),count:parseInt(fv('fCount'),10)||3,
     dlg:parseInt(fv('fDlg'),10)||0,ind:fv('fInd'),goal:fv('fGoal')
   };
   cfg.ind=(cfg.ind==='auto')?detectIndustry(cfg.product):cfg.ind;
@@ -676,9 +672,7 @@ function solLines(c){
   else a.push('这次活动力度是真的大');
   if(c.gate&&c.gate!=='不限机型')a.push(tpl('{gate}就能办，门槛很低',{gate:c.gate}));
   if(c.valid)a.push(tpl('{valid}前办理都来得及',{valid:c.valid}));
-  if(c.chan&&c.chan!=='到店核销')a.push(tpl('{chan}就行，方便得很',{chan:c.chan}));
-  else a.push('线上下单，到店核销就可以');
-  if(c.crow)a.push(tpl('特别适合{crow}',{crow:c.crow}));
+  a.push('线上下单，到店核销就可以');
   return a;
 }
 function hookOpeners(c,pain){
@@ -700,7 +694,7 @@ function sellPoints(c){
   var s=[];
   s.push(c.price?'价格惊喜':'超值活动');
   if(c.gate&&c.gate!=='不限机型')s.push('低门槛');
-  s.push(c.chan&&c.chan!=='到店核销'?c.chan+'便捷':'到店核销便捷');
+  s.push('到店核销便捷');
   if(c.valid)s.push('有效期宽裕');
   return s.slice(0,3).join(' / ');
 }
@@ -806,7 +800,12 @@ function renderResults(list){
 }
 function goShoot(i){
   var r=prep.results[i];if(!r)return;
-  var prompterText=r.prompter.replace(/【[^】]*】/g,'').trim();
+  var prompterText=r.prompter
+    .replace(/【[^】]*】/g,'')
+    .replace(/\([^)]*\)/g,'')
+    .replace(/（[^）]*）/g,'')
+    .replace(/\s+/g,' ')
+    .trim();
   try{localStorage.setItem('kz_prompter_text',prompterText)}catch(e){}
   PENDING_PROMPT=prompterText;
   /* 准备合成用的脚本片段与信息 */
