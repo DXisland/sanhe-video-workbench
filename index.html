@@ -359,7 +359,7 @@ html,body{width:100%;height:100%;overflow:hidden;position:fixed;inset:0;backgrou
     <div class="spacer"></div>
   </div>
   <div class="scroller">
-    <div class="editcard">
+    <div class="editcard" id="editEmpty">
       <div class="bigicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><path d="M8.2 7.8L20 19M8.2 16.2L20 5"/></svg></div>
       <h3>模块搭建中</h3>
       <p>拍摄完成的视频将在这里完成最后的加工，<br>剪辑能力对接后自动开放。</p>
@@ -367,6 +367,12 @@ html,body{width:100%;height:100%;overflow:hidden;position:fixed;inset:0;backgrou
         <span>智能粗剪</span><span>自动字幕</span><span>音乐卡点</span><span>一键导出成片</span>
       </div>
       <button class="abtn primary" id="editHomeBtn" style="width:100%">返回首页</button>
+    </div>
+    <div class="editcard hide" id="editHasShot">
+      <h3>素材已就绪</h3>
+      <p id="editShotInfo"></p>
+      <div class="preview" id="editPreview"><video id="editPreviewMedia" controls playsinline muted></video></div>
+      <button class="abtn primary" id="editHomeBtn2" style="width:100%">返回首页</button>
     </div>
   </div>
 </div>
@@ -456,6 +462,7 @@ html,body{width:100%;height:100%;overflow:hidden;position:fixed;inset:0;backgrou
     <div class="btns">
       <button class="btn" id="saveBtn">保存到相册</button>
       <button class="btn ghost" id="retakeBtn">重拍</button>
+      <button class="btn ghost" id="toEditBtn">去剪辑</button>
     </div>
     <div id="hint">保存时选择「存储到相册」即可；若浏览器直接打开画面，请长按画面保存</div>
   </div>
@@ -480,9 +487,10 @@ var S={
   stream:null,front:true,flipH:true,flipV:false,mode:'half',shoot:'video',
   recording:false,recorder:null,chunks:[],recMime:'',recStart:0,recTimer:null,flipClean:null,
   guides:true,ready:false,camActive:false,wakeLock:null,actx:null,analyser:null,shake:false,
-  tilt:0,gTilt:0,zoom:1,brightBad:false,tiltBad:false,offset:20,graceUntil:0
+  tilt:0,gTilt:0,zoom:1,brightBad:false,tiltBad:false,offset:0,graceUntil:0
 };
 var PENDING_PROMPT=null;
+var LAST_SHOT=null;
 
 /* ---------- Router ---------- */
 var ROUTES=['home','prep','edit','cam'];
@@ -500,6 +508,7 @@ function switchView(name,push){
     document.body.classList.remove('in-cam');
     teardownCam();
   }
+  if(name==='edit')renderEdit();
   if(push!==false){
     suppressHash=true;
     if(location.hash!=='#'+name)location.hash=name;
@@ -521,8 +530,8 @@ function toast(msg,type){
   t.className='toast '+(type||'');
   t.textContent=msg;
   $('toast').appendChild(t);
-  setTimeout(function(){t.style.opacity='0';t.style.transition='opacity .3s'},2600);
-  setTimeout(function(){t.remove()},3000);
+  setTimeout(function(){t.style.opacity='0';t.style.transition='opacity .3s'},2200);
+  setTimeout(function(){t.remove()},2600);
 }
 
 /* ---------- Script generator module ---------- */
@@ -783,6 +792,23 @@ var tiltSmooth={beta:0,gamma:0,bootstrapped:false};
 var tiltWarnTimer=null;
 var lastWarn={},lowStart=null,lowLatch=false;
 
+/* Voice announcements */
+var lastSpeakKey='',lastSpeakTime=0;
+function speak(msg,key){
+  if(!window.speechSynthesis)return;
+  var now=Date.now();
+  if(key&&key===lastSpeakKey&&now-lastSpeakTime<4000)return;
+  lastSpeakKey=key||'';lastSpeakTime=now;
+  speechSynthesis.cancel();
+  var u=new SpeechSynthesisUtterance(msg);
+  u.lang='zh-CN';u.rate=1;u.pitch=1;u.volume=1;
+  var voices=speechSynthesis.getVoices();
+  for(var i=0;i<voices.length;i++){
+    if(voices[i].lang.indexOf('zh')>=0){u.voice=voices[i];break}
+  }
+  speechSynthesis.speak(u);
+}
+
 function warnOnce(key,msg,type,ms){
   var now=Date.now();
   if(lastWarn[key]&&now-lastWarn[key]<(ms||5000))return;
@@ -941,7 +967,8 @@ function resetGyro(){
   showWarn('warnTilt','陀螺仪重置中，保持手机平正 3 秒…','warn',3200);
   setTimeout(function(){
     if(tiltData.ready){
-      S.offset=0;S.graceUntil=Date.now()+2500;
+      S.graceUntil=Date.now()+2500;
+      /* re-bootstrap: set smoothed = new baseline so tilt=0 */
       tiltSmooth.beta=tiltData.beta;
       tiltSmooth.gamma=tiltData.gamma;
       tiltSmooth.bootstrapped=true;
@@ -954,9 +981,9 @@ function updateTiltHUD(){
   if(Date.now()<S.graceUntil)return;
   var t=Math.round(S.tilt),g=Math.round(S.gTilt);
   var msg=null,type='bad';
-  if(t<-8){
+  if(t<-10){
     msg='手机偏低：请抬高手机，镜头与脸同高，防止仰拍变形';
-  }else if(t<-3){
+  }else if(t<-5){
     msg='手机偏低，请抬高手机';
     type='warn';
   }else if(t>20){
@@ -964,14 +991,13 @@ function updateTiltHUD(){
   }else if(t>12){
     msg='手机偏高 '+t+'°：12°内属正常，请放平';
     type='warn';
-  }else if(g>15||g<-15){
-    msg='手机左右歪斜 '+Math.abs(g)+'°，请扶正手机';
-    type='warn';
-  }else if(g>8||g<-8){
-    msg='手机轻微歪斜 '+Math.abs(g)+'°，请扶正';
+  }else if(g>25||g<-25){
+    msg='手机严重歪斜 '+Math.abs(g)+'°，请扶正手机';
     type='warn';
   }
-  if(msg){showWarn('warnTilt',msg,type);S.tiltBad=true}
+  if(msg){showWarn('warnTilt',msg,type);S.tiltBad=true;
+    if(type==='bad')speak(msg,'tilt');
+  }
   else if(S.tiltBad){S.tiltBad=false;showWarn('warnTilt','手机水平正常','good',1200)}
 }
 
@@ -1114,6 +1140,30 @@ function pickMime(){
 }
 function startRecord(){
   if(S.recording||!S.stream)return;
+  $('shutter').disabled=true;
+  /* countdown 3-2-1 */
+  var cd=document.createElement('div');
+  cd.style.cssText='position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;font-size:80px;font-weight:900;color:#fff;text-shadow:0 0 40px rgba(0,229,255,.8),0 0 80px rgba(0,229,255,.4);pointer-events:none;';
+  document.body.appendChild(cd);
+  var nums=['3','2','1'];
+  var idx=0;
+  function tick(){
+    if(idx>=nums.length){
+      cd.remove();
+      $('shutter').disabled=false;
+      doStartRecord();
+      return;
+    }
+    cd.textContent=nums[idx];
+    navigator.vibrate&&navigator.vibrate(20);
+    speak(nums[idx],'cd'+idx);
+    idx++;
+    setTimeout(tick,900);
+  }
+  tick();
+}
+function doStartRecord(){
+  if(S.recording||!S.stream)return;
   S.chunks=[];
   S.recMime=pickMime();
   var built=buildRecordStream();
@@ -1190,6 +1240,12 @@ function showSheet(kind,blob){
   $('sheet').classList.add('open');
   $('saveBtn').onclick=function(){saveBlob(blob,name)};
   $('retakeBtn').onclick=closeSheet;
+  $('toEditBtn').onclick=function(){
+    LAST_SHOT={kind:kind,blob:blob,url:url};
+    closeSheet();
+    switchView('edit');
+    toast('素材已带入剪辑台','good');
+  };
   $('sheetClose').onclick=closeSheet;
 }
 function closeSheet(){$('sheet').classList.remove('open')}
@@ -1220,7 +1276,7 @@ function requestWakeLock(){
   }catch(e){}
 }
 
-var prompter={fontSize:18,speed:1,autoScroll:false,raf:null,scrollTop:0};
+var prompter={fontSize:18,speed:10,autoScroll:false,raf:null,scrollTop:0};
 function openPrompter(){
   $('prompter').classList.add('on');
   $('prompterBtn').style.opacity='1';
@@ -1242,10 +1298,12 @@ function startPrompterScroll(){
   var ta=$('prompterText');
   function tick(){
     if(!prompter.autoScroll||!$('prompter').classList.contains('on'))return;
-    ta.scrollTop+=prompter.speed*0.8;
     if(ta.scrollTop>=ta.scrollHeight-ta.clientHeight){
-      ta.scrollTop=0;
+      prompter.autoScroll=false;
+      $('prompterAutoScroll').classList.remove('on');
+      return;
     }
+    ta.scrollTop+=prompter.speed/10*0.8;
     prompter.raf=requestAnimationFrame(tick);
   }
   prompter.raf=requestAnimationFrame(tick);
@@ -1254,6 +1312,24 @@ function stopPrompterScroll(){
   if(prompter.raf){cancelAnimationFrame(prompter.raf);prompter.raf=null}
 }
 
+function renderEdit(){
+  var has=!!LAST_SHOT;
+  $('editEmpty').classList.toggle('hide',has);
+  $('editHasShot').classList.toggle('hide',!has);
+  if(!has)return;
+  var media=$('editPreviewMedia');
+  if(LAST_SHOT.kind==='photo'){
+    $('editPreviewMedia').outerHTML='<img id="editPreviewMedia" src="'+LAST_SHOT.url+'" alt="">';
+  }else{
+    if(media.tagName!=='VIDEO'){
+      $('editPreviewMedia').outerHTML='<video id="editPreviewMedia" controls playsinline muted></video>';
+      media=$('editPreviewMedia');
+    }
+    media.src=LAST_SHOT.url;
+    media.setAttribute('playsinline','');
+  }
+  $('editShotInfo').textContent=LAST_SHOT.kind==='photo'?'照片素材已带入，剪辑功能开放后可继续加工':'视频素材已带入，时长以拍摄为准，剪辑功能开放后可继续加工';
+}
 function teardownCam(){
   if(S.recording){try{stopRecord()}catch(e){}}
   closeSheet();
@@ -1278,7 +1354,7 @@ function teardownCam(){
   S.zoom=1;$('zoomChip').textContent='1.0x';
   S.front=true;S.flipH=true;S.flipV=false;applyFlip();
   S.guides=true;$('guideBtn').style.opacity='1';
-  S.brightBad=false;S.tiltBad=false;S.offset=20;
+  S.brightBad=false;S.tiltBad=false;S.offset=0;
   $('warnBright').classList.remove('on');
   $('warnTilt').classList.remove('on');
   $('timer').classList.remove('show');
@@ -1422,21 +1498,18 @@ $('prompterFontDown').addEventListener('click',function(){
   $('prompterText').style.fontSize=prompter.fontSize+'px';
 });
 $('prompterSpeedUp').addEventListener('click',function(){
-  prompter.speed=Math.min(5,prompter.speed+0.5);
-  $('prompterSpeedTxt').textContent=prompter.speed+'x';
+  prompter.speed=Math.min(30,prompter.speed+1);
+  $('prompterSpeedTxt').textContent=(prompter.speed/10).toFixed(1)+'x';
 });
 $('prompterSpeedDown').addEventListener('click',function(){
-  prompter.speed=Math.max(0.5,prompter.speed-0.5);
-  $('prompterSpeedTxt').textContent=prompter.speed+'x';
+  prompter.speed=Math.max(5,prompter.speed-1);
+  $('prompterSpeedTxt').textContent=(prompter.speed/10).toFixed(1)+'x';
 });
 $('prompterAutoScroll').addEventListener('click',function(){
   prompter.autoScroll=!prompter.autoScroll;
   $('prompterAutoScroll').classList.toggle('on',prompter.autoScroll);
   if(prompter.autoScroll)startPrompterScroll();
   else stopPrompterScroll();
-});
-$('prompterText').addEventListener('input',function(){
-  try{localStorage.setItem('kz_prompter_text',this.value)}catch(e){}
 });
 
 (function(){
@@ -1489,6 +1562,7 @@ function loop(){
   }
   $('editBack').addEventListener('click',function(){switchView('home')});
   $('editHomeBtn').addEventListener('click',function(){switchView('home')});
+  $('editHomeBtn2').addEventListener('click',function(){switchView('home')});
   initPrep();
 })();
 requestAnimationFrame(loop);
