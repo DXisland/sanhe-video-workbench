@@ -184,7 +184,7 @@ html,body{width:100%;height:100%;overflow:hidden;position:fixed;inset:0;backgrou
 #prompter.on{display:flex}
 #prompterDrag{flex:none;height:30px;display:flex;align-items:center;justify-content:center;cursor:grab;color:rgba(255,255,255,.45);font-size:16px;letter-spacing:4px}
 #prompterDrag:active{cursor:grabbing}
-#prompterText{flex:1;width:100%;background:transparent;border:none;color:#fff;font-size:18px;line-height:1.8;padding:8px 14px;outline:none;resize:none;overflow-y:auto;font-family:inherit;-webkit-user-select:text;user-select:text}
+#prompterText{flex:1;width:100%;background:transparent;border:none;color:#fff;font-size:24px;line-height:1.8;padding:8px 14px;outline:none;resize:none;overflow-y:auto;font-family:inherit;-webkit-user-select:text;user-select:text}
 #prompterText::placeholder{color:rgba(255,255,255,.3)}
 #prompterCtrl{flex:none;display:flex;align-items:center;gap:10px;padding:6px 12px;border-top:1px solid rgba(255,255,255,.08)}
 #prompterCtrl button{background:none;border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;padding:4px 12px;font-size:12px;pointer-events:auto}
@@ -280,12 +280,15 @@ html,body{width:100%;height:100%;overflow:hidden;position:fixed;inset:0;backgrou
         <label>售卖地市范围<em>*</em></label>
         <input class="finput" id="fCity" placeholder="如：南昌（多个地市用、分隔）">
       </div>
+      <div class="field">
+        <label>价格说明</label>
+        <input class="finput" id="fPrice" placeholder="如：49元/月">
+      </div>
 
       <button class="morebtn" id="moreBtn" style="margin-top:4px">展开更多设置 ▾</button>
       <div class="morebox" id="moreBox">
         <div style="padding-top:14px">
           <div class="frow">
-            <div class="field"><label>价格说明</label><input class="finput" id="fPrice" placeholder="如：49元/月"></div>
             <div class="field"><label>口播时长</label>
               <select class="fselect" id="fDur">
                 <option value="15-30" selected>15-30秒</option>
@@ -803,8 +806,9 @@ function renderResults(list){
 }
 function goShoot(i){
   var r=prep.results[i];if(!r)return;
-  try{localStorage.setItem('kz_prompter_text',r.prompter)}catch(e){}
-  PENDING_PROMPT=r.prompter;
+  var prompterText=r.prompter.replace(/【[^】]*】/g,'').trim();
+  try{localStorage.setItem('kz_prompter_text',prompterText)}catch(e){}
+  PENDING_PROMPT=prompterText;
   /* 准备合成用的脚本片段与信息 */
   window._shootSegments=parseScriptToSegments(r.body);
   window._shootScriptInfo={title:r.title};
@@ -1323,7 +1327,7 @@ function requestWakeLock(){
   }catch(e){}
 }
 
-var prompter={fontSize:18,speed:10,autoScroll:false,raf:null,scrollTop:0};
+var prompter={fontSize:24,speed:10,autoScroll:false,raf:null,scrollTop:0};
 function openPrompter(){
   $('prompter').classList.add('on');
   $('prompterBtn').style.opacity='1';
@@ -1364,6 +1368,11 @@ function renderEdit(){
   $('editEmpty').classList.toggle('hide',has);
   $('editHasShot').classList.toggle('hide',!has);
   if(!has)return;
+  /* 进入剪辑页：清除倾斜提醒，语音提示正在合成 */
+  S.tiltBad=false;
+  $('warnTilt').classList.remove('on');
+  speakNow('视频正在剪辑中，请稍后','editEnter');
+
   var media=$('editPreviewMedia');
   if(LAST_SHOT.kind==='photo'){
     $('editPreviewMedia').outerHTML='<img id="editPreviewMedia" src="'+LAST_SHOT.url+'" alt="">';
