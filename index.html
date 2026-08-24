@@ -533,7 +533,38 @@ function switchView(name,push){
     teardownCam();
   }
   if(name==='edit')renderEdit();
-  if(name==='prep')initPrep();
+  if(name==='prep'){
+    // 确保在切换到 prep 视图时绑定所有所需事件监听器
+    // 避免依赖 initPrep() 单次加载的问题
+    var b=document.getElementById('moreBox');
+    var moreBtn=document.getElementById('moreBtn');
+    var prepBack=document.getElementById('prepBack');
+    var prepGo=document.getElementById('prepGo');
+    if(moreBtn){
+      moreBtn.onclick=function(){
+        if(b){b.classList.toggle('open');this.textContent=b.classList.contains('open')?'收起更多设置 ▴':'展开更多设置 ▾';}
+      };
+    }
+    if(prepBack){
+      prepBack.onclick=function(){switchView('home')};
+    }
+    if(prepGo){
+      prepGo.onclick=generate;
+    }
+    // 绑定字段变化监听器
+    var FIELDS=['fProduct','fCity','fPrice','fGate','fValid','fChan','fCrowd','fDur','fCount','fDlg','fInd','fGoal'];
+    for(var i=0;i<FIELDS.length;i++){
+      (function(id){
+        var el=document.getElementById(id);
+        if(!el)return;
+        el.addEventListener('change',function(){prep.draft[id]=el.value;saveDraft()});
+      })(FIELDS[i]);
+    }
+    // 绑定更多按钮文本初始状态
+    if(moreBtn&&moreBox){
+      moreBtn.textContent='展开更多设置 ▾';
+    }
+  }
   if(push!==false){
     suppressHash=true;
     if(location.hash!=='#'+name)location.hash=name;
@@ -795,23 +826,6 @@ function fallbackCopy(t){
   document.body.appendChild(ta);ta.select();
   try{document.execCommand('copy')}catch(e){}
   ta.remove();
-}
-function initPrep(){
-  var draft=loadJSON('prep_draft_v3');
-  for(var i=0;i<FIELDS.length;i++){
-    (function(id){
-      var el=document.getElementById(id);
-      el.addEventListener('change',function(){prep.draft[id]=el.value;saveDraft()});
-      if(draft&&draft[id])el.value=draft[id];
-    })(FIELDS[i]);
-  }
-  document.getElementById('moreBtn').addEventListener('click',function(){
-    var b=document.getElementById('moreBox');
-    var open=b.classList.toggle('open');
-    this.textContent=open?'收起更多设置 ▴':'展开更多设置 ▾';
-  });
-  document.getElementById('prepBack').addEventListener('click',function(){switchView('home')});
-  document.getElementById('prepGo').addEventListener('click',generate);
 }
 
 /* ---------- Camera module ---------- */
@@ -1828,7 +1842,6 @@ function loop(){
     LAST_SHOT=null;window._shootSegments=[];window._shootScriptInfo={};
     switchView('home');
   });
-  initPrep();
 })();
 requestAnimationFrame(loop);
 setInterval(function(){sampleBrightness();sampleAudio()},200);
