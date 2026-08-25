@@ -833,6 +833,8 @@ function goShoot(i){
     .replace(/\([^)]*\)/g,'')
     .replace(/（[^）]*）/g,'')
     .replace(/\[[^\]]*\]/g,'')
+    .replace(/[-—]+文本\d+[-—]+/g,'')
+    .replace(/[-—]+/g,'')
     .replace(/\s+/g,' ')
     .trim();
   try{localStorage.setItem('kz_prompter_text',prompterText)}catch(e){}
@@ -1268,13 +1270,13 @@ function doStartRecord(){
   },250);
   setRecUI(true);
   navigator.vibrate&&navigator.vibrate(30);
-  // 录像开始后延迟启动提词器自动滚动（给用户缓冲时间）
+  // 录像开始后 3 秒延迟启动提词器自动滚动，速度降为 0.3 倍（约 0.15px/帧），贴合正常语速
   if($('prompter').classList.contains('on')){
     setTimeout(function(){
       prompter.autoScroll=true;
       $('prompterAutoScroll').classList.add('on');
       startPrompterScroll();
-    },500);
+    },3000);
   }
 }
 function stopRecord(){
@@ -1363,7 +1365,7 @@ function requestWakeLock(){
   }catch(e){}
 }
 
-var prompter={fontSize:30,speed:10,autoScroll:false,raf:null,scrollTop:0};
+var prompter={fontSize:30,speed:4,autoScroll:false,raf:null,scrollTop:0};
 function openPrompter(){
   $('prompter').classList.add('on');
   $('prompterBtn').style.opacity='1';
@@ -1578,15 +1580,20 @@ function drawSubtitle(ctx,w,h,text){
   ctx.restore();
 }
 
-/* 主合成函数：返回 Promise(url) */
+/* 主合成函数：返回 Promise(url) - iOS/Edge 兼容版 */
 function composeFinalClip(clip, segments, scriptInfo, onProgress){
   return new Promise(function(resolve,reject){
     if(!clip||!clip.url){reject(new Error('no clip'));return;}
     var subtitleLines=segments.map(function(s){return (s.line||'').trim();}).filter(function(l){return !!l;});
     var bigTitle=scriptInfo&&scriptInfo.title?scriptInfo.title:'';
     var video=document.createElement('video');
-    video.src=clip.url;video.playsInline=true;
+    video.src=clip.url;
+    video.playsInline=true;
+    video.muted=true;
+    video.preload='auto';
     var audioCtx=null,sourceNode=null,gainNode=null,audioDest=null,composeStarted=false;
+    var startTime=0, lastProgress=0;
+    var progressTimer=null;
     function initAudio(){
       try{
         audioCtx=new (window.AudioContext||window.webkitAudioContext)();
@@ -1595,6 +1602,12 @@ function composeFinalClip(clip, segments, scriptInfo, onProgress){
         gainNode=audioCtx.createGain();gainNode.gain.value=0;
         sourceNode.connect(audioDest);sourceNode.connect(gainNode);gainNode.connect(audioCtx.destination);
       }catch(e){audioCtx=null;}
+    }
+    function reportProgress(p){
+      if(p>lastProgress){
+        lastProgress=p;
+        if(onProgress)onProgress(p);
+      }
     }
     function startCompose(){
       if(composeStarted)return;composeStarted=true;
@@ -1608,12 +1621,18 @@ function composeFinalClip(clip, segments, scriptInfo, onProgress){
         var aTracks=audioDest.stream.getAudioTracks();
         for(var ai=0;ai<aTracks.length;ai++)stream.addTrack(aTracks[ai]);
       }
-      var mimeType=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'].find(function(t){try{return MediaRecorder.isTypeSupported(t)}catch(e){return false}})||'';
-      var recorder;try{recorder=mimeType?new MediaRecorder(stream,{mimeType:mimeType}):new MediaRecorder(stream);}catch(e){recorder=new MediaRecorder(stream);}
+      // iOS/Edge: 优先尝试 mp4/H.264，再尝试 webm
+      var mimeType=['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'].find(function(t){
+        try{return MediaRecorder.isTypeSupported(t)}catch(e){return false}
+      })||'';
+      var recorder;
+      try{recorder=mimeType?new MediaRecorder(stream,{mimeType:mimeType}):new MediaRecorder(stream);}
+      catch(e){recorder=new MediaRecorder(stream);}
       var chunks=[];recorder.ondataavailable=function(e){if(e.data&&e.data.size>0)chunks.push(e.data);};
       recorder.onstop=function(){
+        if(progressTimer)clearInterval(progressTimer);
         if(audioCtx&&audioCtx.state!=='closed'){try{audioCtx.close();}catch(e){}}
-        var blob=new Blob(chunks,{type:(chunks[0]&&chunks[0].type)||'video/webm'});
+        var blob=new Blob(chunks,{type:(chunks[0]&&chunks[0].type)||mimeType||'video/webm'});
         var url=URL.createObjectURL(blob);resolve(url);
       };
       /* 字幕时间线：按字数比例分配，总时长90%，开头留10%缓冲，每句结束即消失 */
@@ -1634,25 +1653,72 @@ function composeFinalClip(clip, segments, scriptInfo, onProgress){
         if(finished)return;
         var ct=video.currentTime;
         var ended=video.ended||(video.paused&&ct>=duration-0.05)||ct>=duration-0.05;
-        if(ended){finished=true;ctx.drawImage(video,0,0,vw,vh);if(recorder.state==='recording')recorder.stop();return;}
+        if(ended){
+          finished=true;
+          ctx.drawImage(video,0,0,vw,vh);
+          if(recorder.state==='recording')recorder.stop();
+          reportProgress(1);
+          return;
+        }
         ctx.drawImage(video,0,0,vw,vh);
         if(bigTitle)drawTitle(ctx,vw,vh,bigTitle);
-        var cur='';for(var ti=0;ti<subTimeline.length;ti++){if(ct>=subTimeline[ti].start&&ct<subTimeline[ti].end){cur=subTimeline[ti].text;break;}}
+        var cur='';
+        for(var ti=0;ti<subTimeline.length;ti++){
+          if(ct>=subTimeline[ti].start&&ct<subTimeline[ti].end){cur=subTimeline[ti].text;break;}
+        }
         if(cur)drawSubtitle(ctx,vw,vh,cur);
-        if(onProgress)onProgress(Math.min(1,ct/duration));
+        reportProgress(Math.min(1,ct/duration));
         requestAnimationFrame(drawFrame);
       }
       recorder.start(200);
+      // 启动定时器兜底进度（防止 video.currentTime 不更新导致卡 0%）
+      startTime=Date.now();
+      progressTimer=setInterval(function(){
+        if(finished)return;
+        var elapsed=(Date.now()-startTime)/1000;
+        var p=Math.min(1, elapsed/duration);
+        if(p>lastProgress) reportProgress(p);
+        // 强制兜底：超过时长 2 秒仍未结束，强制停止
+        if(elapsed > duration + 2){
+          finished=true;
+          clearInterval(progressTimer);
+          if(recorder.state==='recording')recorder.stop();
+          reportProgress(1);
+        }
+      }, 200);
+      // 额外的硬性超时保护
+      var forceStopTimer=setTimeout(function(){
+        if(!finished){
+          finished=true;
+          clearInterval(progressTimer);
+          if(recorder.state==='recording')recorder.stop();
+          reportProgress(1);
+        }
+      }, (duration + 5) * 1000);
       var playFunc=function(){
-        video.play().then(function(){if(onProgress)onProgress(0);drawFrame();}).catch(function(e){reject(e);});
+        video.play().then(function(){
+          reportProgress(0);
+          drawFrame();
+        }).catch(function(e){
+          console.warn('Video play failed, trying fallback:', e.message);
+          reportProgress(0);
+          drawFrame();
+        });
       };
-      if(audioCtx&&audioCtx.state==='suspended'){audioCtx.resume().then(playFunc);}else{playFunc();}
+      if(audioCtx&&audioCtx.state==='suspended'){
+        audioCtx.resume().then(playFunc).catch(playFunc);
+      }else{playFunc();}
     }
     video.onloadeddata=function(){
       if(!audioCtx)initAudio();
-      setTimeout(startCompose,100);
+      setTimeout(startCompose,50);
     };
-    var fallback=setTimeout(function(){if(video.readyState>=2&&!composeStarted){if(!audioCtx)initAudio();startCompose();}},3000);
+    var fallback=setTimeout(function(){
+      if(video.readyState>=2&&!composeStarted){
+        if(!audioCtx)initAudio();
+        startCompose();
+      }
+    }, 3000);
     video.onerror=function(){clearTimeout(fallback);reject(new Error('video load fail'));};
   });
 }
@@ -1664,6 +1730,9 @@ function parseScriptToSegments(text){
   var lines=text.split('\n');
   lines.forEach(function(line){
     var clean=line.replace(/^[AB]\uFF1A/,'').trim();if(!clean)return;
+    // 过滤掉动作神态提醒 [xxx]，只保留口播文字
+    clean=clean.replace(/\[[^\]]*\]/g,'').trim();
+    if(!clean)return;
     var isA=line.startsWith('A\uFF1A'),isB=line.startsWith('B\uFF1A');
     var sentences=splitSentences(clean);
     if(sentences.length>0){
