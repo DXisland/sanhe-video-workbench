@@ -98,6 +98,8 @@ html,body{width:100%;height:100%;overflow:hidden;position:fixed;inset:0;backgrou
 .stag{font-size:10px;padding:3px 9px;border-radius:999px;border:1px solid rgba(255,200,87,.45);color:#ffd987}
 .stag.cy{border-color:rgba(0,229,255,.5);color:#9feaff}
 .stext{font-size:13.5px;line-height:2.05;color:#dff0fa;white-space:pre-wrap;word-break:break-word;-webkit-user-select:text;user-select:text}
+.stext .spoken-text{color:#eafcff;font-style:normal}
+.stext .action-cue{color:#6a9bbd;font-style:italic;opacity:0.85}
 .pubbox{margin-top:11px;padding:9px 11px;border-radius:10px;background:rgba(255,255,255,.04);border:1px dashed rgba(147,170,190,.28);font-size:12px;line-height:1.95;color:#b9d4e4;white-space:pre-wrap;-webkit-user-select:text;user-select:text}
 .sfoot{display:flex;gap:9px;margin-top:12px}
 .sfoot .abtn{font-size:13px;padding:10px 0;letter-spacing:2px}
@@ -184,7 +186,7 @@ html,body{width:100%;height:100%;overflow:hidden;position:fixed;inset:0;backgrou
 #prompter.on{display:flex}
 #prompterDrag{flex:none;height:30px;display:flex;align-items:center;justify-content:center;cursor:grab;color:rgba(255,255,255,.45);font-size:16px;letter-spacing:4px}
 #prompterDrag:active{cursor:grabbing}
-#prompterText{flex:1;width:100%;background:transparent;border:none;color:#fff;font-size:24px;line-height:1.8;padding:8px 14px;outline:none;resize:none;overflow-y:auto;font-family:inherit;-webkit-user-select:text;user-select:text}
+#prompterText{flex:1;width:100%;background:transparent;border:none;color:#fff;font-size:30px;line-height:1.8;padding:8px 14px;outline:none;resize:none;overflow-y:auto;font-family:inherit;-webkit-user-select:text;user-select:text}
 #prompterText::placeholder{color:rgba(255,255,255,.3)}
 #prompterCtrl{flex:none;display:flex;align-items:center;gap:10px;padding:6px 12px;border-top:1px solid rgba(255,255,255,.08)}
 #prompterCtrl button{background:none;border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;padding:4px 12px;font-size:12px;pointer-events:auto}
@@ -775,11 +777,13 @@ function renderResults(list){
   var html='';
   for(var i=0;i<list.length;i++){
     var parts=list[i].head.split(' · ');
+    // 处理文案正文：将口播文字和动作提示分离显示
+    var displayBody=formatScriptBody(list[i].body);
     html+='<div class="scard">'
       +'<div class="scardHead"><b>文案'+(i+1)+'</b>'
       +'<span class="stag cy">'+esc(parts[1]||'')+'</span>'
       +'<span class="stag">'+esc(parts[2]||'')+'</span></div>'
-      +'<div class="stext">'+esc(list[i].body)+'</div>'
+      +'<div class="stext">'+displayBody+'</div>'
       +'<div style="margin-top:9px;font-size:12px;color:#ffd987">（卖点：'+esc(list[i].sell)+'）</div>'
       +'<div style="margin-top:5px;font-size:12px;color:#b9d4e4">[道具建议] '+esc(list[i].props)+'</div>'
       +'<div class="pubbox">'+esc('【发布信息】\n'+list[i].pub)+'</div>'
@@ -798,12 +802,37 @@ function renderResults(list){
     cps[k].addEventListener('click',function(){copyScript(this.getAttribute('data-copy'))});
   }
 }
+// 将脚本正文中的口播文字和动作/表情提示分离显示
+// 口播文字：黑色/白色常规；动作提示[...]：灰色斜体、前缀"🎭 "
+function formatScriptBody(body){
+  if(!body)return '';
+  return body.split('\n').map(function(line){
+    // 匹配 A：/B： 前缀
+    var prefix='';
+    var content=line;
+    var m=line.match(/^([AB]：\s*)(.*)$/);
+    if(m){prefix=m[1];content=m[2];}
+    // 分离口播文字和 [动作提示]
+    var parts=content.split(/(\[.*?\])/);
+    var out=prefix;
+    for(var i=0;i<parts.length;i++){
+      var p=parts[i];
+      if(p.startsWith('[')&&p.endsWith(']')){
+        out+='<span class="action-cue">'+esc(p)+'</span>';
+      }else if(p.length>0){
+        out+='<span class="spoken-text">'+esc(p)+'</span>';
+      }
+    }
+    return out;
+  }).join('\n');
+}
 function goShoot(i){
   var r=prep.results[i];if(!r)return;
   var prompterText=r.prompter
     .replace(/【[^】]*】/g,'')
     .replace(/\([^)]*\)/g,'')
     .replace(/（[^）]*）/g,'')
+    .replace(/\[[^\]]*\]/g,'')
     .replace(/\s+/g,' ')
     .trim();
   try{localStorage.setItem('kz_prompter_text',prompterText)}catch(e){}
@@ -1239,6 +1268,14 @@ function doStartRecord(){
   },250);
   setRecUI(true);
   navigator.vibrate&&navigator.vibrate(30);
+  // 录像开始后延迟启动提词器自动滚动（给用户缓冲时间）
+  if($('prompter').classList.contains('on')){
+    setTimeout(function(){
+      prompter.autoScroll=true;
+      $('prompterAutoScroll').classList.add('on');
+      startPrompterScroll();
+    },500);
+  }
 }
 function stopRecord(){
   if(!S.recording)return;
@@ -1326,7 +1363,7 @@ function requestWakeLock(){
   }catch(e){}
 }
 
-var prompter={fontSize:24,speed:10,autoScroll:false,raf:null,scrollTop:0};
+var prompter={fontSize:30,speed:10,autoScroll:false,raf:null,scrollTop:0};
 function openPrompter(){
   $('prompter').classList.add('on');
   $('prompterBtn').style.opacity='1';
