@@ -839,8 +839,8 @@ function goShoot(i){
     .trim();
   try{localStorage.setItem('kz_prompter_text',prompterText)}catch(e){}
   PENDING_PROMPT=prompterText;
-  /* 准备合成用的脚本片段与信息 */
-  window._shootSegments=parseScriptToSegments(r.body);
+  /* 准备合成用的脚本片段与信息 —— 直接用提词器纯净文本生成片段，确保字幕只含口播内容 */
+  window._shootSegments=parseScriptToSegments(prompterText);
   window._shootScriptInfo={title:r.title};
   saveDraft();
   switchView('cam');
