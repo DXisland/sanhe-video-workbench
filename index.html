@@ -126,6 +126,31 @@ html,body{width:100%;height:100%;overflow:hidden;position:fixed;inset:0;backgrou
 .featrow{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:24px}
 .featrow span{font-size:11.5px;font-weight:500;color:var(--ink2);border:none;border-radius:999px;padding:5px 13px;background:#F5F5F7}
 
+/* ===== 素材库面板 ===== */
+.matpanel{width:100%;max-width:520px;margin:18px auto 0;padding:18px 16px;border-radius:var(--r-lg);background:var(--card);box-shadow:var(--shadow);text-align:left}
+.mathead{display:flex;align-items:baseline;gap:10px;margin-bottom:14px}
+.mathead b{font-size:17px;font-weight:800;color:var(--ink);letter-spacing:-.2px}
+.mathead .matsub{font-size:11.5px;color:var(--ink3)}
+.mattabs{display:flex;background:#F5F5F7;border-radius:999px;padding:3px;margin-bottom:14px}
+.mattabs button{flex:1;border:0;background:none;color:var(--ink2);font-size:13.5px;font-weight:600;padding:8px 0;border-radius:999px;cursor:pointer;transition:all .18s}
+.mattabs button.on{background:#fff;color:var(--ink);box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.matlist{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.matcard{position:relative;border:1.5px solid var(--line);border-radius:var(--r-md);overflow:hidden;cursor:pointer;background:#fff;transition:border-color .15s,transform .12s}
+.matcard:active{transform:scale(.97)}
+.matcard.sel{border-color:var(--blue);box-shadow:0 0 0 2px rgba(10,132,255,.12)}
+.matcard .mcover{aspect-ratio:16/10;display:flex;align-items:center;justify-content:center;position:relative}
+.matcard .mcover svg{width:26px;height:26px;color:rgba(255,255,255,.9);filter:drop-shadow(0 2px 6px rgba(0,0,0,.3))}
+.matcard .mcover .mplay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.25)}
+.matcard .mcover .mplay .ring{width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.25);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center}
+.matcard .mcover .mplay svg{width:16px;height:16px;color:#fff}
+.matcard .minfo{padding:9px 10px 10px}
+.matcard .minfo b{display:block;font-size:12.5px;font-weight:700;color:var(--ink);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.matcard .minfo span{font-size:10.5px;color:var(--ink3)}
+.matcard .mcheck{position:absolute;top:8px;right:8px;width:22px;height:22px;border-radius:50%;background:var(--blue);display:none;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,113,227,.4)}
+.matcard .mcheck svg{width:12px;height:12px;color:#fff}
+.matcard.sel .mcheck{display:flex}
+.matcard.playing .mcover .mplay .ring{animation:spin 1s linear infinite}
+
 /* ===== 拍摄界面（深色取景 + 苹果风控件） ===== */
 #cam{position:fixed;inset:0;z-index:1;overflow:hidden;touch-action:none;background:#000}
 #video{position:absolute;left:50%;top:50%;width:100%;height:100%;object-fit:cover;background:transparent}
@@ -389,6 +414,18 @@ html,body{width:100%;height:100%;overflow:hidden;position:fixed;inset:0;backgrou
             <div id="editSynthBar" style="width:0%;height:100%;background:#0A84FF;transition:width .3s"></div>
           </div>
         </div>
+      </div>
+      <div class="matpanel" id="matPanel">
+        <div class="mathead">
+          <b>素材库</b>
+          <span class="matsub">视频穿插到成片中间 · 音频作为 BGM</span>
+        </div>
+        <div class="mattabs">
+          <button class="on" data-mattab="video">视频素材</button>
+          <button data-mattab="audio">背景音乐</button>
+        </div>
+        <div class="matlist" id="matVideoList"></div>
+        <div class="matlist hide" id="matAudioList"></div>
       </div>
       <div class="flex gap-8 mt-4" style="flex-wrap:wrap">
         <button class="abtn primary" id="editSaveBtn" style="flex:1;min-width:140px" disabled>保存成片</button>
@@ -1356,6 +1393,120 @@ function stopPrompterScroll(){
   if(prompter.raf){cancelAnimationFrame(prompter.raf);prompter.raf=null}
 }
 
+/* ===== 素材库（占位素材跑通流程，后续替换 manifestUrl 为 OSS/COS 清单） ===== */
+var MATERIAL_LIB={
+  manifestUrl:'', /* 后续填 OSS/COS 的 manifest.json 地址，自动远程加载 */
+  items:{
+    video:[
+      {id:'v1',title:'产品特写 示例A',url:'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',dur:30},
+      {id:'v2',title:'门店环境 示例B',url:'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4',dur:4},
+      {id:'v3',title:'转场画面 示例C',url:'https://media.w3.org/2010/05/bunny/trailer.mp4',dur:33},
+      {id:'v4',title:'生活场景 示例D',url:'https://media.w3.org/2010/05/sintel/trailer.mp4',dur:52}
+    ],
+    audio:[
+      {id:'a1',title:'轻快流行 示例',url:'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',dur:372},
+      {id:'a2',title:'节奏鼓点 示例',url:'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',dur:330}
+    ]
+  }
+};
+var EDIT_PLAN={inserts:[],bgm:null};
+var editState='ready';
+var MAT_GRADS=['linear-gradient(135deg,#0A84FF,#5856D6)','linear-gradient(135deg,#FF9F0A,#FF375F)','linear-gradient(135deg,#30D158,#63E6E2)','linear-gradient(135deg,#BF5AF2,#5E5CE6)'];
+var bgmAudio=null,bgmPlayingId=null;
+
+function loadMaterialLib(cb){
+  if(MATERIAL_LIB.manifestUrl){
+    fetch(MATERIAL_LIB.manifestUrl).then(function(r){return r.json()}).then(function(manifest){
+      if(manifest&&manifest.items)MATERIAL_LIB.items=manifest.items;
+      cb&&cb();
+    }).catch(function(){cb&&cb()});
+  }else{cb&&cb()}
+}
+function renderMatLib(){
+  var vh='',ah='';
+  MATERIAL_LIB.items.video.forEach(function(v,i){
+    var sel=EDIT_PLAN.inserts.indexOf(v.id)>=0;
+    vh+='<div class="matcard'+(sel?' sel':'')+'" data-matvid="'+v.id+'">'
+      +'<div class="mcover" style="background:'+MAT_GRADS[i%MAT_GRADS.length]+'">'
+      +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.5l5 2.5-5 2.5z" fill="currentColor" stroke="none"/></svg>'
+      +'<span class="mcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5 9-10"/></svg></span>'
+      +'</div>'
+      +'<div class="minfo"><b>'+esc(v.title)+'</b><span>'+v.dur+' 秒 · 视频</span></div>'
+      +'</div>';
+  });
+  MATERIAL_LIB.items.audio.forEach(function(a,i){
+    var sel=EDIT_PLAN.bgm===a.id;
+    ah+='<div class="matcard'+(sel?' sel':'')+(bgmPlayingId===a.id?' playing':'')+'" data-mataud="'+a.id+'">'
+      +'<div class="mcover" style="background:'+MAT_GRADS[(i+2)%MAT_GRADS.length]+'">'
+      +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>'
+      +'<span class="mcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5 9-10"/></svg></span>'
+      +'</div>'
+      +'<div class="minfo"><b>'+esc(a.title)+'</b><span>'+(a.dur>60?Math.round(a.dur/60)+' 分钟':'1 分钟内')+' · BGM</span></div>'
+      +'</div>';
+  });
+  $('matVideoList').innerHTML=vh;
+  $('matAudioList').innerHTML=ah;
+  var vlist=$('matVideoList').querySelectorAll('[data-matvid]');
+  for(var vi=0;vi<vlist.length;vi++){
+    vlist[vi].addEventListener('click',function(){
+      var id=this.getAttribute('data-matvid');
+      var idx=EDIT_PLAN.inserts.indexOf(id);
+      if(idx>=0){EDIT_PLAN.inserts.splice(idx,1)}
+      else{
+        if(EDIT_PLAN.inserts.length>=3){toast('最多选 3 个视频素材','warn');return}
+        EDIT_PLAN.inserts.push(id);
+      }
+      renderMatLib();
+      updateMatHint();
+    });
+  }
+  var alist=$('matAudioList').querySelectorAll('[data-mataud]');
+  for(var ai=0;ai<alist.length;ai++){
+    alist[ai].addEventListener('click',function(){
+      var id=this.getAttribute('data-mataud');
+      EDIT_PLAN.bgm=(EDIT_PLAN.bgm===id)?null:id;
+      toggleBgmPreview(id);
+      renderMatLib();
+      updateMatHint();
+    });
+  }
+}
+function toggleBgmPreview(id){
+  var a=MATERIAL_LIB.items.audio.find(function(x){return x.id===id});
+  if(!a)return;
+  if(bgmAudio&&bgmPlayingId===id){
+    bgmAudio.pause();bgmAudio=null;bgmPlayingId=null;return;
+  }
+  if(bgmAudio){try{bgmAudio.pause()}catch(e){}}
+  bgmAudio=new Audio(a.url);
+  bgmAudio.volume=.6;
+  bgmPlayingId=id;
+  bgmAudio.play().catch(function(){});
+  bgmAudio.onended=function(){bgmPlayingId=null;renderMatLib()};
+}
+function updateMatHint(){
+  var n=EDIT_PLAN.inserts.length;
+  var txt='视频穿插 '+(n>0?n+' 段':'未选择')+' · BGM '+(EDIT_PLAN.bgm?'已选':'未选择');
+  $('editShotInfo').textContent='视频素材已就绪。'+txt+'，点击保存开始合成';
+}
+function stopBgmPreview(){
+  if(bgmAudio){try{bgmAudio.pause()}catch(e){}bgmAudio=null;bgmPlayingId=null}
+}
+function initMatTabs(){
+  var tabs=document.querySelectorAll('#matPanel .mattabs button');
+  for(var i=0;i<tabs.length;i++){
+    tabs[i].addEventListener('click',function(){
+      var t=this.getAttribute('data-mattab');
+      var all=document.querySelectorAll('#matPanel .mattabs button');
+      for(var j=0;j<all.length;j++)all[j].classList.remove('on');
+      this.classList.add('on');
+      $('matVideoList').classList.toggle('hide',t!=='video');
+      $('matAudioList').classList.toggle('hide',t!=='audio');
+    });
+  }
+}
+initMatTabs();
+
 function renderEdit(){
   var has=!!LAST_SHOT;
   $('editEmpty').classList.toggle('hide',has);
@@ -1366,10 +1517,13 @@ function renderEdit(){
   var media=$('editPreviewMedia');
   if(LAST_SHOT.kind==='photo'){
     $('editPreviewMedia').outerHTML='<img id="editPreviewMedia" src="'+LAST_SHOT.url+'" alt="">';
+    $('matPanel').classList.add('hide');
     $('editSynthOverlay').classList.add('hide');
     $('editSynthStatus').classList.add('hide');
     $('editSaveBtn').disabled=false;
+    $('editSaveBtn').textContent='保存成片';
     $('editShotInfo').textContent='照片素材已就绪，可直接保存';
+    editState='done';
     return;
   }
   if(media.tagName!=='VIDEO'){
@@ -1378,24 +1532,32 @@ function renderEdit(){
   }
   media.src=LAST_SHOT.url;
   media.setAttribute('playsinline','');
-  $('editShotInfo').textContent='视频素材已就绪，正在自动合成标题+字幕成片...';
+  $('matPanel').classList.remove('hide');
+  $('editSynthOverlay').classList.add('hide');
+  $('editSynthStatus').classList.add('hide');
+  $('editSynthBar').style.width='0%';
+  $('editSaveBtn').disabled=false;
+  $('editSaveBtn').textContent='开始合成';
+  editState='ready';
+  loadMaterialLib(function(){
+    renderMatLib();
+    updateMatHint();
+  });
+}
+function startSynthesis(){
+  if(editState!=='ready')return;
+  editState='composing';
+  stopBgmPreview();
+  var media=$('editPreviewMedia');
+  $('editSaveBtn').disabled=true;
   $('editSynthOverlay').classList.remove('hide');
   $('editSynthStatus').classList.remove('hide');
-  $('editSaveBtn').disabled=true;
   $('editSynthBar').style.width='0%';
   $('editSynthText').textContent='正在合成成片... 0%';
-
   var segs=window._shootSegments||[];
   var info=window._shootScriptInfo||{};
-  if(segs.length===0){
-    $('editSynthText').textContent='未检测到脚本片段，仅保存原始视频';
-    $('editSynthOverlay').classList.add('hide');
-    $('editSynthStatus').classList.add('hide');
-    $('editSaveBtn').disabled=false;
-    return;
-  }
   var startTime=Date.now();
-  composeFinalClip(LAST_SHOT,segs,info,function(prog){
+  composeFinalClip(LAST_SHOT,segs,info,EDIT_PLAN,function(prog){
     var pct=Math.round(prog*100);
     var elapsed=((Date.now()-startTime)/1000).toFixed(1);
     $('editSynthBar').style.width=pct+'%';
@@ -1406,12 +1568,16 @@ function renderEdit(){
     $('editSynthOverlay').classList.add('hide');
     $('editSynthStatus').classList.add('hide');
     $('editSaveBtn').disabled=false;
-    $('editShotInfo').textContent='成片已合成（含标题+逐句字幕），可直接保存到相册';
+    $('editSaveBtn').textContent='保存成片';
+    editState='done';
+    $('editShotInfo').textContent='成片已合成（字幕+穿插素材+BGM），可直接保存到相册';
     toast('成片合成完成','good');
   }).catch(function(err){
     $('editSynthOverlay').classList.add('hide');
     $('editSynthStatus').classList.add('hide');
     $('editSaveBtn').disabled=false;
+    $('editSaveBtn').textContent='保存原始视频';
+    editState='done';
     $('editShotInfo').textContent='合成失败，将保存原始视频：'+(err.message||err);
     toast('合成失败，保存原始视频','warn');
   });
@@ -1886,19 +2052,25 @@ function loop(){
   $('editHomeBtn').addEventListener('click',function(){switchView('home')});
   $('editSaveBtn').addEventListener('click',function(){
     var clip=LAST_SHOT;if(!clip)return;
+    if(editState==='ready'){startSynthesis();return}
+    if(editState==='composing'){toast('正在合成中，请稍候','warn');return}
     var url=clip.finalUrl||clip.url;
     var a=document.createElement('a');a.href=url;
     a.download='成片_'+new Date().toLocaleString('zh-CN',{hour12:false}).replace(/[/:\s]/g,'-')+'.webm';
     a.click();toast('已开始保存成片','good');
   });
   $('editRetakeBtn').addEventListener('click',function(){
+    stopBgmPreview();
     var old=LAST_SHOT;if(old){if(old.url)URL.revokeObjectURL(old.url);if(old.finalUrl&&old.finalUrl!==old.url)URL.revokeObjectURL(old.finalUrl);}
     LAST_SHOT=null;window._shootSegments=[];window._shootScriptInfo={};
-    switchView('cam');showPrepPhase();startShootCamera();updateShootGuide();
+    EDIT_PLAN={inserts:[],bgm:null};
+    switchView('cam');
   });
   $('editRestartBtn').addEventListener('click',function(){
+    stopBgmPreview();
     var old=LAST_SHOT;if(old){if(old.url)URL.revokeObjectURL(old.url);if(old.finalUrl&&old.finalUrl!==old.url)URL.revokeObjectURL(old.finalUrl);}
     LAST_SHOT=null;window._shootSegments=[];window._shootScriptInfo={};
+    EDIT_PLAN={inserts:[],bgm:null};
     switchView('home');
   });
 })();
