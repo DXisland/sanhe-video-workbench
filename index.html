@@ -47,6 +47,37 @@ html,body{width:100%;height:100%;overflow:hidden;position:fixed;inset:0;backgrou
 .harrow{flex:none;color:#C7C7CC;font-size:20px;line-height:1;font-weight:300}
 .homenote{margin-top:28px;font-size:11.5px;color:var(--ink3);line-height:1.9;text-align:center}
 
+/* ===== 首页 Hero & 卡片重设计 ===== */
+.hero{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:center;margin:8px 0 24px;padding:0 2px}
+.hero-content h1{font-size:28px;font-weight:800;letter-spacing:-.8px;color:var(--ink);line-height:1.25;margin-bottom:10px}
+.hero-desc{font-size:15px;color:var(--ink2);line-height:1.6;font-weight:400}
+.hero-visual{display:flex;justify-content:flex-end}
+.hero-steps{display:flex;align-items:center;gap:0}
+.step{display:flex;flex-direction:column;align-items:center;gap:4px;padding:0 16px;position:relative}
+.step:not(:last-child)::after{content:"";position:absolute;right:-8px;top:50%;transform:translateY(-50%);width:24px;height:2px;background:linear-gradient(90deg,var(--blue),transparent);opacity:.4}
+.step-num{width:28px;height:28px;border-radius:50%;background:var(--grad);color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(10,132,255,.3)}
+.step-label{font-size:11px;color:var(--ink2);font-weight:500;white-space:nowrap}
+.step-connector{display:none}
+
+.hcard-feature{flex-direction:row;gap:16px;padding:22px 18px;background:linear-gradient(145deg,rgba(10,132,255,.06),rgba(88,86,214,.04));border:1px solid rgba(10,132,255,.15)}
+.hcard-feature .hicon{width:56px;height:56px;border-radius:16px;background:var(--grad)}
+.hcard-feature .hicon svg{width:28px;height:28px;color:#fff}
+.hcontent{flex:1;min-width:0}
+.hcontent .htag{font-size:10.5px;font-weight:700;color:var(--blue);background:rgba(10,132,255,.1);padding:2px 8px;border-radius:999px;display:inline-block;margin-bottom:6px;letter-spacing:.5px}
+.hcontent h3{font-size:18px;font-weight:800;letter-spacing:-.3px;color:var(--ink);margin-bottom:4px;line-height:1.3}
+.hcontent p{font-size:13px;color:var(--ink2);line-height:1.55;margin-bottom:10px}
+.hfeatures{display:flex;flex-wrap:wrap;gap:6px}
+.hfeatures span{font-size:10px;font-weight:500;color:var(--blue);background:rgba(10,132,255,.08);padding:3px 9px;border-radius:999px}
+.harrow-wrap{display:flex;align-items:center}
+
+.homecards-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+.hcard-feature .htxt{display:none}
+.hcard-feature .hcontent{flex:1}
+
+@media (prefers-reduced-motion: reduce){
+  .hero-content h1,.hero-desc,.hero-steps .step{animation:none}
+}
+
 .topbar{display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top) + 14px) 16px 12px}
 .backchip{flex:none;width:34px;height:34px;border-radius:50%;border:none;background:var(--card);box-shadow:var(--shadow);color:var(--blue);font-size:19px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;font-weight:300}
 .backchip:active{opacity:.55}
@@ -213,7 +244,7 @@ html,body{width:100%;height:100%;overflow:hidden;position:fixed;inset:0;backgrou
 @keyframes pop{from{transform:translateY(-8px);opacity:0}to{transform:translateY(0);opacity:1}}
 @keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
 
-#prompter{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top) + 48px);z-index:3;height:44vh;display:none;flex-direction:column;margin:0 10px;border-radius:var(--r-md);background:rgba(18,18,22,.72);backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px);border:1px solid rgba(255,255,255,.12);overflow:hidden;touch-action:none}
+#prompter{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top) + 48px);z-index:3;height:44vh;display:none;flex-direction:column;margin:0 10px;border-radius:var(--r-md);background:rgba(0,0,0,.25);backdrop-filter:saturate(180%) blur(8px);-webkit-backdrop-filter:saturate(180%) blur(8px);border:1px solid rgba(255,255,255,.08);overflow:hidden;touch-action:none}
 #prompter.on{display:flex}
 #prompterDrag{flex:none;height:30px;display:flex;align-items:center;justify-content:center;cursor:grab;color:rgba(255,255,255,.4);font-size:16px;letter-spacing:4px}
 #prompterDrag:active{cursor:grabbing}
@@ -264,30 +295,68 @@ html,body{width:100%;height:100%;overflow:hidden;position:fixed;inset:0;backgrou
     <div class="wrap">
       <div class="brandbar">
         <div id="logo">成品视频工作台</div>
-        <span class="verchip">框架版 v0.1</span>
+        <span class="verchip">v2.0 简约版</span>
       </div>
-      <div id="slogan">准备 · 拍摄 · 剪辑 一步到位</div>
+      <div class="hero">
+        <div class="hero-content">
+          <h1>三步完成<br>成品视频</h1>
+          <p class="hero-desc">脚本 · 拍摄 · 剪辑 · 一气呵成</p>
+        </div>
+        <div class="hero-visual">
+          <div class="hero-steps">
+            <div class="step" data-step="1">
+              <span class="step-num">1</span>
+              <span class="step-label">脚本</span>
+            </div>
+            <div class="step-connector"></div>
+            <div class="step" data-step="2">
+              <span class="step-num">2</span>
+              <span class="step-label">拍摄</span>
+            </div>
+            <div class="step-connector"></div>
+            <div class="step" data-step="3">
+              <span class="step-num">3</span>
+              <span class="step-label">剪辑</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <p class="homeintro">为门店员工打造的三合一成片工具：填好产品信息一键生成口播脚本，带着表演标注对提词器开拍，人人都能产出成品视频。</p>
+
       <div class="homecards">
-        <div class="hcard" data-go="prep">
+        <div class="hcard hcard-feature" data-go="prep">
           <div class="hicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h6M9 11h6M9 15h4"/></svg></div>
-          <div class="htxt"><b>拍摄前的准备</b><span>填产品信息 · 一键出脚本 · 直达提词器</span></div>
-          <span class="hbadge warn">脚本生成</span>
-          <span class="harrow">›</span>
+          <div class="hcontent">
+            <div class="htag">核心功能</div>
+            <h3>拍摄前的准备</h3>
+            <p>填产品信息 · 一键出脚本 · 直达提词器</p>
+            <div class="hfeatures">
+              <span>智能脚本</span>
+              <span>表演标注</span>
+              <span>直达提词器</span>
+            </div>
+          </div>
+          <div class="harrow-wrap"><span class="harrow">›</span></div>
         </div>
-        <div class="hcard" data-go="cam">
-          <div class="hicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6.5" width="13" height="11" rx="2"/><path d="M15.5 10.5l6-3v9l-6-3"/></svg></div>
-          <div class="htxt"><b>拍摄视频</b><span>辅助取景 · 提词器 · 人声检测 · 直接出片</span></div>
-          <span class="hbadge">可用</span>
-          <span class="harrow">›</span>
+
+        <div class="homecards-grid">
+          <div class="hcard" data-go="cam">
+            <div class="hicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6.5" width="13" height="11" rx="2"/><path d="M15.5 10.5l6-3v9l-6-3"/></svg></div>
+            <div class="htxt"><b>拍摄视频</b><span>辅助取景 · 提词器 · 人声检测 · 直接出片</span></div>
+            <span class="hbadge">可用</span>
+            <span class="harrow">›</span>
+          </div>
+
+          <div class="hcard" data-go="edit" onclick="guideToPrep()">
+            <div class="hicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><path d="M8.2 7.8L20 19M8.2 16.2L20 5"/></svg></div>
+            <div class="htxt"><b>视频剪辑</b><span>裁剪 · 字幕 · 配乐 · 一键成片导出</span></div>
+            <span class="hbadge off">请从第一步开始</span>
+            <span class="harrow">›</span>
+          </div>
         </div>
-<div class="hcard" data-go="edit" onclick="guideToPrep()">
-  <div class="hicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><path d="M8.2 7.8L20 19M8.2 16.2L20 5"/></svg></div>
-  <div class="htxt"><b>视频剪辑</b><span>裁剪 · 字幕 · 配乐 · 一键成片导出</span></div>
-  <span class="hbadge off">请从第一步开始</span>
-  <span class="harrow">›</span>
-</div>
       </div>
+
       <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br>板块①脚本为本地模板生成，可对接技能后端升级为 AI 生成</div>
     </div>
   </div>
@@ -465,6 +534,7 @@ html,body{width:100%;height:100%;overflow:hidden;position:fixed;inset:0;backgrou
       <div class="right">
         <span class="chip btn" id="prompterBtn">提示词</span>
         <span class="chip btn" id="guideBtn">辅助线</span>
+        <span class="chip btn" id="flipCameraBtn">翻转</span>
       </div>
       <span id="timer"><span class="rdot"></span><span id="timerTxt">00:00</span></span>
     </div>
@@ -1089,34 +1159,43 @@ function drawOverlay(){
   c.restore();
 
   var m=MODES[S.mode];
-  var hy=m.head*h,r=m.r*h,neckY=m.neck*h,shY=m.sh*h,shw=m.shl*w;
+  var hy=m.head*h,neckY=m.neck*h,shY=m.sh*h,shw=m.shl*w;
   var wy=(m.torsoEnd!=null?m.torsoEnd:(m.hip!=null?Math.max(.35,m.hip-.03):.6))*h;
-  var ww=((m.torsoW!=null?m.torsoW:(m.hipW!=null?m.hipW*1.1:.07)))*w;
-
-  c.save();
-  c.setLineDash([]);
-  var hg=c.createRadialGradient(cx,hy,0,cx,hy,r*1.6);
-  hg.addColorStop(0,'rgba(255,255,255,.14)');hg.addColorStop(1,'rgba(255,255,255,0)');
-  c.fillStyle=hg;c.beginPath();c.arc(cx,hy,r*1.6,0,Math.PI*2);c.fill();
-  strokePath(c,function(){
-    c.beginPath();c.arc(cx,hy,r,0,Math.PI*2);
-  },{w:2,dash:[4,5],glow:6});
-  c.restore();
+  var shY_s=m.sh*h; // 肩部Y坐标
+  var shw_s=m.shl*w; // 肩部宽度
 
   /* 头顶位置标记：圆点 + 标签 */
   c.save();
   c.fillStyle='#FFD60A';
   c.shadowColor='rgba(0,0,0,.5)';c.shadowBlur=4;
-  c.beginPath();c.arc(cx,hy-r,4,0,Math.PI*2);c.fill();
-  c.font='600 12px -apple-system,"PingFang SC",sans-serif';
+  c.beginPath();c.arc(cx,hy,5,0,Math.PI*2);c.fill();
+  c.font='600 11px -apple-system,"PingFang SC",sans-serif';
   c.textAlign='left';c.textBaseline='middle';
   c.fillStyle='rgba(0,0,0,.5)';
-  c.fillText('头顶',cx+r+14,hy-r+1);
+  c.fillText('头顶',cx+9,hy+1);
   c.fillStyle='#FFD60A';
-  c.fillText('头顶',cx+r+13,hy-r);
+  c.fillText('头顶',cx+8,hy);
+  c.restore();
+
+  /* 肩部位置标记：横虚线 + 标签 */
+  var shY_s=neckY; // 肩部Y约等于颈部Y
+  c.save();
+  c.setLineDash([7,6]);
+  c.lineWidth=2;
+  c.strokeStyle='rgba(0,0,0,.45)';
+  c.beginPath();c.moveTo(cx-shw_s*1.2,shY_s);c.lineTo(cx+shw_s*1.2,shY_s);c.stroke();
+  c.strokeStyle='#30D158';
+  c.beginPath();c.moveTo(cx-shw_s*1.2,shY_s);c.lineTo(cx+shw_s*1.2,shY_s);c.stroke();
+  c.font='600 11px -apple-system,"PingFang SC",sans-serif';
+  c.textAlign='right';c.textBaseline='bottom';
+  c.fillStyle='rgba(0,0,0,.5)';
+  c.fillText('肩部',cx+shw_s*1.2+2,shY_s-8+1);
+  c.fillStyle='#30D158';
+  c.fillText('肩部',cx+shw_s*1.2+1,shY_s-8);
   c.restore();
 
   /* 腰部位置标记：横虚线 + 标签 */
+  var wy=(m.torsoEnd!=null?m.torsoEnd:(m.hip!=null?Math.max(.35,m.hip-.03):.6))*h;
   c.save();
   c.setLineDash([7,6]);
   c.lineWidth=2;
@@ -1124,62 +1203,13 @@ function drawOverlay(){
   c.beginPath();c.moveTo(w*0.12,wy);c.lineTo(w*0.88,wy);c.stroke();
   c.strokeStyle='#30D158';
   c.beginPath();c.moveTo(w*0.12,wy);c.lineTo(w*0.88,wy);c.stroke();
-  c.font='600 12px -apple-system,"PingFang SC",sans-serif';
+  c.font='600 11px -apple-system,"PingFang SC",sans-serif';
   c.textAlign='right';c.textBaseline='bottom';
   c.fillStyle='rgba(0,0,0,.5)';
   c.fillText('腰部',w*0.88,wy-8+1);
   c.fillStyle='#30D158';
   c.fillText('腰部',w*0.88,wy-8);
-  c.restore();
-
-  strokePath(c,function(){
-    c.beginPath();c.moveTo(cx,hy+r*0.88);c.lineTo(cx,neckY);
-  },{w:1.5});
-
-  strokePath(c,function(){
-    c.beginPath();
-    c.moveTo(cx-shw,shY-shw*0.06);
-    c.quadraticCurveTo(cx,shY+shw*0.18,cx+shw,shY-shw*0.06);
-  },{w:2});
-
-  strokePath(c,function(){
-    c.beginPath();
-    c.moveTo(cx-shw,shY);
-    c.quadraticCurveTo(cx-shw*0.75,(shY+wy)*0.52,cx-ww,wy);
-  },{w:1.8});
-  strokePath(c,function(){
-    c.beginPath();
-    c.moveTo(cx+shw,shY);
-    c.quadraticCurveTo(cx+shw*0.75,(shY+wy)*0.52,cx+ww,wy);
-  },{w:1.8});
-
-  var ay=(m.armEnd||wy)*h,aw=ww*0.85;
-  strokePath(c,function(){
-    c.beginPath();
-    c.moveTo(cx-shw,shY);
-    c.bezierCurveTo(cx-shw*1.15,shY+(ay-shY)*0.35,cx-aw*1.3,shY+(ay-shY)*0.7,cx-aw*1.1,ay);
-  },{w:1.5,glow:7});
-  strokePath(c,function(){
-    c.beginPath();
-    c.moveTo(cx+shw,shY);
-    c.bezierCurveTo(cx+shw*1.15,shY+(ay-shY)*0.35,cx+aw*1.3,shY+(ay-shY)*0.7,cx+aw*1.1,ay);
-  },{w:1.5,glow:7});
-
-  if(m.hip&&m.knee&&m.foot){
-    var hipY=m.hip*h,hipW=m.hipW*w,kneeY=m.knee*h,kneeW=m.kneeW*w,footY=m.foot*h,footW=m.footW*w;
-    strokePath(c,function(){
-      c.beginPath();
-      c.moveTo(cx-hipW,hipY);
-      c.quadraticCurveTo(cx-hipW*0.95,(hipY+kneeY)*0.5,cx-kneeW,kneeY);
-      c.lineTo(cx-footW,footY);
-    },{w:1.8});
-    strokePath(c,function(){
-      c.beginPath();
-      c.moveTo(cx+hipW,hipY);
-      c.quadraticCurveTo(cx+hipW*0.95,(hipY+kneeY)*0.5,cx+kneeW,kneeY);
-      c.lineTo(cx+footW,footY);
-    },{w:1.8});
-  }
+c.restore();
 }
 
 function drawFrame(c,cw,ch){
@@ -2063,6 +2093,10 @@ $('guideBtn').addEventListener('click',function(){
   S.guides=!S.guides;
   $('guideBtn').style.opacity=S.guides?'1':'.45';
   toast(S.guides?'辅助线已开启':'辅助线已关闭',S.guides?'good':'');
+});
+
+$('flipCameraBtn').addEventListener('click',function(){
+  switchCamera();
 });
 
 $('prompterBtn').addEventListener('click',togglePrompter);
