@@ -802,7 +802,8 @@ function generate(){
     out.push({
       head:head,body:body,sell:sellPoints(c),props:props,
       pub:buildPub(c,i),
-      prompter:'—— '+head+' ——\n【道具】'+props+'\n\n'+body
+      prompter:'—— '+head+' ——\n【道具】'+props+'\n\n'+body,
+      title:((c.price?c.price+' ':'')+c.product).slice(0,16)
     });
   }
   renderResults(out);
