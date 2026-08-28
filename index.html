@@ -71,8 +71,14 @@ html,body{width:100%;height:100%;overflow:hidden;position:fixed;inset:0;backgrou
 .harrow-wrap{display:flex;align-items:center}
 
 .homecards-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
-.hcard-feature .htxt{display:none}
-.hcard-feature .hcontent{flex:1}
+.homecards-grid .hcard{flex-direction:column;align-items:flex-start;padding:16px 14px}
+.homecards-grid .hcard .hicon{width:44px;height:44px;border-radius:12px}
+.homecards-grid .hcard .hicon svg{width:22px;height:22px}
+.homecards-grid .hcard .htxt{flex:none;width:100%;margin-top:10px}
+.homecards-grid .hcard .htxt b{font-size:15px;font-weight:700;line-height:1.3;margin-bottom:4px}
+.homecards-grid .hcard .htxt span{font-size:12px;line-height:1.5;white-space:normal;word-break:keep-all}
+.homecards-grid .hcard .hbadge{margin-top:10px}
+.homecards-grid .hcard .harrow{position:absolute;bottom:12px;right:12px}
 
 @media (prefers-reduced-motion: reduce){
   .hero-content h1,.hero-desc,.hero-steps .step{animation:none}
@@ -244,7 +250,7 @@ html,body{width:100%;height:100%;overflow:hidden;position:fixed;inset:0;backgrou
 @keyframes pop{from{transform:translateY(-8px);opacity:0}to{transform:translateY(0);opacity:1}}
 @keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
 
-#prompter{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top) + 48px);z-index:3;height:44vh;display:none;flex-direction:column;margin:0 10px;border-radius:var(--r-md);background:rgba(0,0,0,.25);backdrop-filter:saturate(180%) blur(8px);-webkit-backdrop-filter:saturate(180%) blur(8px);border:1px solid rgba(255,255,255,.08);overflow:hidden;touch-action:none}
+#prompter{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top) + 48px);z-index:3;height:44vh;display:none;flex-direction:column;margin:0 10px;border-radius:var(--r-md);background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;border:none;overflow:hidden;touch-action:none}
 #prompter.on{display:flex}
 #prompterDrag{flex:none;height:30px;display:flex;align-items:center;justify-content:center;cursor:grab;color:rgba(255,255,255,.4);font-size:16px;letter-spacing:4px}
 #prompterDrag:active{cursor:grabbing}
@@ -1765,7 +1771,7 @@ function composeFinalClip(clip, segments, scriptInfo, plan, onProgress){
       }
     }
 
-    var audioCtx=null,audioDest=null,composeStarted=false,startTime=0,lastProgress=0,progressTimer=null,forceStopTimer=null;
+    var audioCtx=null,audioDest=null,composeStarted=false,startTime=0,lastProgress=0,progressTimer=null,forceStopTimer=null,recorderTimeout=null;
 
     function initAudio(){
       try{
@@ -1854,6 +1860,18 @@ function composeFinalClip(clip, segments, scriptInfo, plan, onProgress){
         var blob=new Blob(chunks,{type:(chunks[0]&&chunks[0].type)||mimeType||'video/webm'});
         var url=URL.createObjectURL(blob);resolve(url);
       };
+      
+      /* 兜底：如果 recorder 异常导致 onstop 不触发，直接用现有 chunks resolve */
+      var recorderTimeout=setTimeout(function(){
+        if(!finished && chunks.length>0){
+          finished=true;
+          if(progressTimer)clearInterval(progressTimer);
+          if(forceStopTimer)clearTimeout(forceStopTimer);
+          var blob=new Blob(chunks,{type:(chunks[0]&&chunks[0].type)||mimeType||'video/webm'});
+          var url=URL.createObjectURL(blob);
+          resolve(url);
+        }
+      },(total+10)*1000);
 
       var finished=false;
       var compStart=performance.now();
@@ -1867,6 +1885,7 @@ function composeFinalClip(clip, segments, scriptInfo, plan, onProgress){
         finished=true;
         if(progressTimer)clearInterval(progressTimer);
         if(forceStopTimer)clearTimeout(forceStopTimer);
+        if(recorderTimeout)clearTimeout(recorderTimeout);
         if(recorder.state==='recording')recorder.stop();
         reportProgress(1);
       }
