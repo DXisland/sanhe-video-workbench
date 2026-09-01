@@ -1526,7 +1526,129 @@ function renderMatLib(){
     });
   }
 }
-function toggleBgmPreview(id){
+function fetchCosList(prefix){
+  return fetch('https://sanhe-video-assets-v1-1257256483.cos.ap-guangzhou.myqcloud.com/?prefix=' + encodeURIComponent(prefix) + '&max-keys=1000').then(function(r){return r.text()})
+}
+function parseCosXmlKeys(xmlText){
+  const keys=[]
+  const dummy=document.createElement('textarea')
+  dummy.innerHTML=xmlText
+  const rows=dummy.value.split('\n')
+  for(const row of rows){
+    const m=row.match(/<Key>([^<]+)<\/Key>/)
+    if(m) keys.push(m[1])
+  }
+  return keys
+}
+function getVideoFolders(cb){
+  fetchCosList('视频素材/').then(parseCosXmlKeys).then(function(folders){
+    // 只取文件夹名（去掉前缀“视频素材/”且确保是文件夹而非 MP4 文件）
+    const folderNames=[]
+    for(const f of folders){
+      const name=f.trim()
+      if(name&&!name.toLowerCase().endsWith('.mp4')&&name!=='视频素材')folderNames.push(name)
+    }
+    cb&&cb(folderNames.unique())
+  }).catch(cb&&(cb([])))
+}
+Array.prototype.unique=function(){return this.filter((v,i,a)=>a.indexOf(v)===i)}
+function randomItem(arr){return arr[Math.floor(Math.random()*arr.length)]}
+function randomSubArr(arr,n){const copy=[...arr];const res=[];for(let i=0;i<n&&i<copy.length;i++){res.push(copy[i])}return res}
+function selectRandomVideos(folderName,count,cb){
+  fetchCosList('视频素材/' + folderName + '/').then(parseCosXmlKeys).then(function(files){
+    const mp4s=files.filter(function(f){return f.toLowerCase().endsWith('.mp4')})
+    if(mp4s.length===0){cb&&cb([]);return}
+    const sample=randomSubArr(mp4s,Math.min(count,mp4s.length))
+    cb&&cb(sample)
+  }).catch(cb&&(cb([])))
+}
+function renderVideoSelector(){
+  const folders=VIDEO_FOLDERS// 由后端 COS 列取，此处写死 5 个已知型号
+  const sel=document.createElement('select')
+  sel.id='phoneModelSel'
+  sel.style.cssText='width:100%;padding:10px;font-size:14px;border:1px solid var(--line2);border-radius:var(--r-sm);color:var(--ink);margin-bottom:12px'
+  const def=document.createElement('option')
+  def.value='';def.textContent='—— 选择手机型号 ——'
+  sel.appendChild(def)
+  for(const f of folders){const o=document.createElement('option');o.value=f;o.textContent=f;sel.appendChild(o)}
+  const preview=document.createElement('div')
+  preview.id='videoPreview'
+  preview.style.cssText='margin-top:8px;padding:8px;border:1px dashed var(--line2);border-radius:var(--r-sm);min-height:40px;background:var(--card)'
+  sel.addEventListener('change',function(){
+    const folder=this.value
+    if(!folder){preview.innerHTML='';return}
+    selectRandomVideos(folder,2,function(videos){
+      if(videos.length===0){preview.innerHTML='未找到视频';return}
+      let html=''
+      for(const v of videos){html+='<div style="font-size:12px;color:var(--ink2);">'+v+'</div>'}
+      preview.innerHTML='<b>随机选 '+videos.length+' 个视频：</b>'+html
+    })
+  })
+  preview.innerHTML='请先选择手机型号'
+  const card=$('editEmpty')||$('editHasShot')
+  const matPanel=$('matPanel')
+  // 插入到素材库面板的视频 tab 之前
+  const tabBtns=matPanel.querySelectorAll('.mattabs button')
+  const videoTab=tabBtns[0]// 视频 tab 按钮
+  // 在视频 tab 的内部插入 selector + preview
+  const videoContent=matPanel.querySelector('#matVideoList')
+  if(videoContent){
+    videoContent.parentNode.insertBefore(sel,videoContent)
+    videoContent.parentNode.insertBefore(preview,videoContent)
+  }else{
+    matPanel.insertBefore(sel,matPanel.firstChild)
+    matPanel.insertBefore(preview,sel)
+  }
+  // 兼容已有的 matVideoList 如果还在
+  const oldVList=$('matVideoList')
+  if(oldVList&&oldVList.parentNode===matPanel){oldVList.parentNode.removeChild(oldVList)}
+  return{sel,preview}
+}
+const VIDEO_FOLDERS=(function(){
+  try{return ['OPPO Find X8s','vivoY300pro','荣耀Power','荣耀magic7','荣耀magic7Pro']}catch(e){return[]})
+})()
+function renderAudioRandom(){
+  // 从 COS 音频素材列出所有文件名
+  fetchCosList('音频素材/').then(parseCosXmlKeys).then(function(allKeys){
+    // 过滤掉目录条目（ Key 等非文件名）
+    const audioFiles=allKeys.filter(function(k){return k&&!k.startsWith('音频素材/')&&k.toLowerCase().endsWith('.mp3')})
+    if(audioFiles.length===0){$('matAudioList').innerHTML='<div style="color:var(--ink2)">未找到音频文件</div>';return}
+    // 初始随机展示 3 首
+    function sample(n){const copy=[...audioFiles];const res=[];for(let i=0;i<n&&i<copy.length;i++){res.push(copy[i])}return res}
+    const sample3=sample(3)
+    function renderList(files){
+      if(!files||files.length===0){$('matAudioList').innerHTML='<div style="color:var(--ink2)">无可用 BGM</div>';return}
+      let html=''
+      for(const f of files){
+        const fname=f.replace('音频素材/','')
+        html+='<div class="matcard" style="padding:6px 4px;margin:2px 0;background:var(--card);border-radius:var(--r-sm);"><div style="font-size:12px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;">'+fname+'</div></div>'
+      }
+      $('matAudioList').innerHTML=html
+      // 添加“换一批”按钮（如果不存在）
+      let btn=$('randomAudioBtn')
+      if(!btn){
+        btn=document.createElement('button')
+        btn.id='randomAudioBtn'
+        btn.className='abtn ghost'
+        btn.style.cssText='margin-top:8px;padding:6px 12px;font-size:13px;'
+        btn.textContent='换一批'
+        btn.addEventListener('click',function(){
+          const newSample=sample(3)
+          renderList(newSample)
+        })
+        const matList=$('matAudioList')
+        const matPanel=$('matPanel')
+        matPanel.insertBefore(btn,matList)
+      }
+    }
+    renderList(sample3)
+  }).catch(function(){$('matAudioList').innerHTML='<div style="color:var(--ink2)">加载音频失败</div>'})
+}
+function initEditMaterialLib(){
+  // 页面加载时一次性加载视频文件夹下拉和音频随机列表
+  renderVideoSelector()
+  renderAudioRandom()
+}
   var a=MATERIAL_LIB.items.audio.find(function(x){return x.id===id});
   if(!a)return;
   if(bgmAudio&&bgmPlayingId===id){
@@ -1566,7 +1688,7 @@ function renderEdit(){
   var has=!!LAST_SHOT;
   $('editEmpty').classList.toggle('hide',has);
   $('editHasShot').classList.toggle('hide',!has);
-  if(!has)return;
+  if(!has){initEditMaterialLib();return;}
   speakNow('视频正在剪辑中，请稍后','editEnter');
 
   var media=$('editPreviewMedia');
