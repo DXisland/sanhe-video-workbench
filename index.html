@@ -1526,6 +1526,19 @@ function renderMatLib(){
     });
   }
 }
+function toggleBgmPreview(id){
+  var a=MATERIAL_LIB.items.audio.find(function(x){return x.id===id});
+  if(!a)return;
+  if(bgmAudio&&bgmPlayingId===id){
+    bgmAudio.pause();bgmAudio=null;bgmPlayingId=null;return;
+  }
+  if(bgmAudio){try{bgmAudio.pause()}catch(e){}}
+  bgmAudio=new Audio(a.url);
+  bgmAudio.volume=.6;
+  bgmPlayingId=id;
+  bgmAudio.play().catch(function(){});
+  bgmAudio.onended=function(){bgmPlayingId=null;renderMatLib()}
+}
 function fetchCosList(prefix){
   return fetch('https://sanhe-video-assets-v1-1257256483.cos.ap-guangzhou.myqcloud.com/?prefix=' + encodeURIComponent(prefix) + '&max-keys=1000').then(function(r){return r.text()})
 }
