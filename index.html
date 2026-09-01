@@ -1450,20 +1450,13 @@ function stopPrompterScroll(){
 
 /* ===== 素材库（占位素材跑通流程，后续替换 manifestUrl 为 OSS/COS 清单） ===== */
 var MATERIAL_LIB={
-  manifestUrl:'', /* 后续填 OSS/COS 的 manifest.json 地址，自动远程加载 */
+  manifestUrl:'',
   items:{
-    video:[
-      {id:'v1',title:'产品特写 示例A',url:'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',dur:30},
-      {id:'v2',title:'门店环境 示例B',url:'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4',dur:4},
-      {id:'v3',title:'转场画面 示例C',url:'https://media.w3.org/2010/05/bunny/trailer.mp4',dur:33},
-      {id:'v4',title:'生活场景 示例D',url:'https://media.w3.org/2010/05/sintel/trailer.mp4',dur:52}
-    ],
-    audio:[
-      {id:'a1',title:'轻快流行 示例',url:'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',dur:372},
-      {id:'a2',title:'节奏鼓点 示例',url:'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',dur:330}
-    ]
+    video:[],
+    audio:[]
   }
 };
+var COS_BASE='https://sanhe-video-assets-v1-1257256483.cos.ap-guangzhou.myqcloud.com/';
 var EDIT_PLAN={inserts:[],bgm:null};
 var editState='ready';
 var MAT_GRADS=['linear-gradient(135deg,#0A84FF,#5856D6)','linear-gradient(135deg,#FF9F0A,#FF375F)','linear-gradient(135deg,#30D158,#63E6E2)','linear-gradient(135deg,#BF5AF2,#5E5CE6)'];
@@ -1564,100 +1557,95 @@ function getVideoFolders(cb){
     cb&&cb(folderNames.unique())
   }).catch(cb&&(cb([])))
 }
-Array.prototype.unique=function(){return this.filter((v,i,a)=>a.indexOf(v)===i)}
-function randomItem(arr){return arr[Math.floor(Math.random()*arr.length)]}
-function randomSubArr(arr,n){const copy=[...arr];const res=[];for(let i=0;i<n&&i<copy.length;i++){res.push(copy[i])}return res}
-function selectRandomVideos(folderName,count,cb){
-  fetchCosList('视频素材/' + folderName + '/').then(parseCosXmlKeys).then(function(files){
-    const mp4s=files.filter(function(f){return f.toLowerCase().endsWith('.mp4')})
-    if(mp4s.length===0){cb&&cb([]);return}
-    const sample=randomSubArr(mp4s,Math.min(count,mp4s.length))
-    cb&&cb(sample)
-  }).catch(cb&&(cb([])))
+function cosUrl(key){
+  return COS_BASE + String(key).split('/').map(function(seg){return encodeURIComponent(seg)}).join('/');
 }
-function renderVideoSelector(){
-  const folders=['OPPO Find X8s','vivoY300pro','荣耀Power','荣耀magic7','荣耀magic7Pro']
-  const sel=document.createElement('select')
-  sel.id='phoneModelSel'
-  sel.style.cssText='width:100%;padding:10px;font-size:14px;border:1px solid var(--line2);border-radius:var(--r-sm);color:var(--ink);margin-bottom:12px'
-  const def=document.createElement('option')
-  def.value='';def.textContent='—— 选择手机型号 ——'
-  sel.appendChild(def)
-  for(const f of folders){const o=document.createElement('option');o.value=f;o.textContent=f;sel.appendChild(o)}
-  const preview=document.createElement('div')
-  preview.id='videoPreview'
-  preview.style.cssText='margin-top:8px;padding:8px;border:1px dashed var(--line2);border-radius:var(--r-sm);min-height:40px;background:var(--card)'
-  sel.addEventListener('change',function(){
-    const folder=this.value
-    if(!folder){preview.innerHTML='';return}
-    selectRandomVideos(folder,2,function(videos){
-      if(videos.length===0){preview.innerHTML='未找到视频';return}
-      let html=''
-      for(const v of videos){html+='<div style="font-size:12px;color:var(--ink2);">'+v+'</div>'}
-      preview.innerHTML='<b>随机选 '+videos.length+' 个视频：</b>'+html
-    })
-  })
-  preview.innerHTML='请先选择手机型号'
-  const card=$('editEmpty')||$('editHasShot')
-  const matPanel=$('matPanel')
-  // 插入到素材库面板的视频 tab 之前
-  const tabBtns=matPanel.querySelectorAll('.mattabs button')
-  const videoTab=tabBtns[0]// 视频 tab 按钮
-  // 在视频 tab 的内部插入 selector + preview
-  const videoContent=matPanel.querySelector('#matVideoList')
-  if(videoContent){
-    videoContent.parentNode.insertBefore(sel,videoContent)
-    videoContent.parentNode.insertBefore(preview,videoContent)
-  }else{
-    matPanel.insertBefore(sel,matPanel.firstChild)
-    matPanel.insertBefore(preview,sel)
-  }
-  // 兼容已有的 matVideoList 如果还在
-  const oldVList=$('matVideoList')
-  if(oldVList&&oldVList.parentNode===matPanel){oldVList.parentNode.removeChild(oldVList)}
-  return{sel,preview}
+function shuffle(arr){
+  var a=arr.slice();
+  for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t;}
+  return a;
 }
-function renderAudioRandom(){
-  // 从 COS 音频素材列出所有文件名
-  fetchCosList('音频素材/').then(parseCosXmlKeys).then(function(allKeys){
-    // 过滤掉目录条目（ Key 等非文件名）
-    const audioFiles=allKeys.filter(function(k){return k&&!k.startsWith('音频素材/')&&k.toLowerCase().endsWith('.mp3')})
-    if(audioFiles.length===0){$('matAudioList').innerHTML='<div style="color:var(--ink2)">未找到音频文件</div>';return}
-    // 初始随机展示 3 首
-    function sample(n){const copy=[...audioFiles];const res=[];for(let i=0;i<n&&i<copy.length;i++){res.push(copy[i])}return res}
-    const sample3=sample(3)
-    function renderList(files){
-      if(!files||files.length===0){$('matAudioList').innerHTML='<div style="color:var(--ink2)">无可用 BGM</div>';return}
-      let html=''
-      for(const f of files){
-        const fname=f.replace('音频素材/','')
-        html+='<div class="matcard" style="padding:6px 4px;margin:2px 0;background:var(--card);border-radius:var(--r-sm);"><div style="font-size:12px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;">'+fname+'</div></div>'
-      }
-      $('matAudioList').innerHTML=html
-      // 添加“换一批”按钮（如果不存在）
-      let btn=$('randomAudioBtn')
-      if(!btn){
-        btn=document.createElement('button')
-        btn.id='randomAudioBtn'
-        btn.className='abtn ghost'
-        btn.style.cssText='margin-top:8px;padding:6px 12px;font-size:13px;'
-        btn.textContent='换一批'
-        btn.addEventListener('click',function(){
-          const newSample=sample(3)
-          renderList(newSample)
-        })
-        const matList=$('matAudioList')
-        const matPanel=$('matPanel')
-        matPanel.insertBefore(btn,matList)
-      }
+function loadVideoFolders(cb){
+  fetchCosList('视频素材/').then(parseCosXmlKeys).then(function(keys){
+    var map={};
+    for(var i=0;i<keys.length;i++){
+      var rest=String(keys[i]).replace(/^视频素材\//,'');
+      var slash=rest.indexOf('/');
+      var name=(slash>=0?rest.substring(0,slash):rest).trim();
+      if(name && !/\.mp4$/i.test(name) && name!=='视频素材')map[name]=1;
     }
-    renderList(sample3)
-  }).catch(function(){$('matAudioList').innerHTML='<div style="color:var(--ink2)">加载音频失败</div>'})
+    var folders=[];for(var k in map)folders.push(k);
+    cb&&cb(folders);
+  }).catch(function(){cb&&cb([])});
 }
-function initEditMaterialLib(){
-  // 页面加载时一次性加载视频文件夹下拉和音频随机列表
-  renderVideoSelector()
-  renderAudioRandom()
+function loadRandomVideos(folder,count,cb){
+  fetchCosList('视频素材/'+folder+'/').then(parseCosXmlKeys).then(function(keys){
+    var mp4s=[];
+    for(var i=0;i<keys.length;i++){if(/\.mp4$/i.test(keys[i]))mp4s.push(keys[i]);}
+    var picked=shuffle(mp4s).slice(0,Math.min(count||2,mp4s.length));
+    var items=picked.map(function(k,i){
+      return {id:'cv_'+i+'_'+Math.floor(Math.random()*1e6),title:String(k).split('/').pop(),url:cosUrl(k),dur:12};
+    });
+    cb&&cb(items);
+  }).catch(function(){cb&&cb([])});
+}
+function loadRandomAudio(count,cb){
+  fetchCosList('音频素材/').then(parseCosXmlKeys).then(function(keys){
+    var mp3s=[];
+    for(var i=0;i<keys.length;i++){if(/\.mp3$/i.test(keys[i]))mp3s.push(keys[i]);}
+    var picked=shuffle(mp3s).slice(0,Math.min(count||5,mp3s.length));
+    var items=picked.map(function(k,i){
+      return {id:'ca_'+i+'_'+Math.floor(Math.random()*1e6),title:String(k).replace(/^音频素材\//,''),url:cosUrl(k),dur:180};
+    });
+    cb&&cb(items);
+  }).catch(function(){cb&&cb([])});
+}
+function ensureVideoFolderSel(){
+  if($('videoFolderSel'))return;
+  var wrap=document.createElement('div');
+  wrap.id='videoFolderSel';
+  wrap.style.cssText='margin-bottom:10px';
+  wrap.innerHTML='<select class="fselect" id="phoneModelSel" style="width:100%"><option value="">选择手机型号（随机取该型号视频）</option></select>';
+  var vlist=$('matVideoList');
+  vlist.parentNode.insertBefore(wrap,vlist);
+  loadVideoFolders(function(folders){
+    var sel=$('phoneModelSel');
+    for(var i=0;i<folders.length;i++){
+      var o=document.createElement('option');o.value=folders[i];o.textContent=folders[i];sel.appendChild(o);
+    }
+  });
+  $('phoneModelSel').addEventListener('change',function(){
+    var folder=this.value;
+    if(!folder){MATERIAL_LIB.items.video=[];renderMatLib();updateMatHint();return;}
+    loadRandomVideos(folder,2,function(items){
+      MATERIAL_LIB.items.video=items;
+      renderMatLib();
+      updateMatHint();
+    });
+  });
+}
+function ensureAudioRefreshBtn(){
+  if($('audioRefreshBtn'))return;
+  var btn=document.createElement('button');
+  btn.id='audioRefreshBtn';
+  btn.className='abtn ghost hide';
+  btn.style.cssText='margin-top:10px;padding:8px 12px;font-size:13px;width:100%';
+  btn.textContent='换一批音乐';
+  btn.addEventListener('click',refreshAudio);
+  var alist=$('matAudioList');
+  alist.parentNode.insertBefore(btn,alist.nextSibling);
+}
+function refreshAudio(){
+  loadRandomAudio(5,function(items){
+    MATERIAL_LIB.items.audio=items;
+    renderMatLib();
+    updateMatHint();
+  });
+}
+function initCosMaterialUI(){
+  ensureVideoFolderSel();
+  ensureAudioRefreshBtn();
+  refreshAudio();
 }
 function updateMatHint(){
   var n=EDIT_PLAN.inserts.length;
@@ -1677,6 +1665,7 @@ function initMatTabs(){
       this.classList.add('on');
       $('matVideoList').classList.toggle('hide',t!=='video');
       $('matAudioList').classList.toggle('hide',t!=='audio');
+      if($('audioRefreshBtn'))$('audioRefreshBtn').classList.toggle('hide',t!=='audio');
     });
   }
 }
@@ -1686,7 +1675,7 @@ function renderEdit(){
   var has=!!LAST_SHOT;
   $('editEmpty').classList.toggle('hide',has);
   $('editHasShot').classList.toggle('hide',!has);
-  if(!has){initEditMaterialLib();return;}
+  if(!has){initCosMaterialUI();return;}
   speakNow('视频正在剪辑中，请稍后','editEnter');
 
   var media=$('editPreviewMedia');
@@ -1715,7 +1704,7 @@ function renderEdit(){
   $('editSaveBtn').textContent='开始合成';
   editState='ready';
   loadMaterialLib(function(){
-    renderMatLib();
+    initCosMaterialUI();
     updateMatHint();
   });
 }
