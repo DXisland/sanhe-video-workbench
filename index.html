@@ -1576,7 +1576,7 @@ function selectRandomVideos(folderName,count,cb){
   }).catch(cb&&(cb([])))
 }
 function renderVideoSelector(){
-  const folders=VIDEO_FOLDERS// 由后端 COS 列取，此处写死 5 个已知型号
+  const folders=['OPPO Find X8s','vivoY300pro','荣耀Power','荣耀magic7','荣耀magic7Pro']
   const sel=document.createElement('select')
   sel.id='phoneModelSel'
   sel.style.cssText='width:100%;padding:10px;font-size:14px;border:1px solid var(--line2);border-radius:var(--r-sm);color:var(--ink);margin-bottom:12px'
@@ -1617,9 +1617,6 @@ function renderVideoSelector(){
   if(oldVList&&oldVList.parentNode===matPanel){oldVList.parentNode.removeChild(oldVList)}
   return{sel,preview}
 }
-const VIDEO_FOLDERS=(function(){
-  try{return ['OPPO Find X8s','vivoY300pro','荣耀Power','荣耀magic7','荣耀magic7Pro']}catch(e){return[]})
-})()
 function renderAudioRandom(){
   // 从 COS 音频素材列出所有文件名
   fetchCosList('音频素材/').then(parseCosXmlKeys).then(function(allKeys){
@@ -1661,18 +1658,6 @@ function initEditMaterialLib(){
   // 页面加载时一次性加载视频文件夹下拉和音频随机列表
   renderVideoSelector()
   renderAudioRandom()
-}
-  var a=MATERIAL_LIB.items.audio.find(function(x){return x.id===id});
-  if(!a)return;
-  if(bgmAudio&&bgmPlayingId===id){
-    bgmAudio.pause();bgmAudio=null;bgmPlayingId=null;return;
-  }
-  if(bgmAudio){try{bgmAudio.pause()}catch(e){}}
-  bgmAudio=new Audio(a.url);
-  bgmAudio.volume=.6;
-  bgmPlayingId=id;
-  bgmAudio.play().catch(function(){});
-  bgmAudio.onended=function(){bgmPlayingId=null;renderMatLib()};
 }
 function updateMatHint(){
   var n=EDIT_PLAN.inserts.length;
