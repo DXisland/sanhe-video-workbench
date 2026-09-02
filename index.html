@@ -2035,9 +2035,13 @@ function composeFinalClip(clip, segments, scriptInfo, plan, onProgress){
         }
         var seg=findSeg(ct);
         if(seg.type==='main'){
-          var mts=seg.m0+(ct-seg.s);
-          if(Math.abs(mainVideo.currentTime-mts)>0.35){
-            try{mainVideo.currentTime=Math.min(mts,D-0.05)}catch(e){}
+          var mts=seg.m0+Math.max(0,ct-seg.s);
+          if(mainVideo.readyState>=2){
+            if(Math.abs(mainVideo.currentTime-mts)>0.5){
+              try{mainVideo.currentTime=Math.min(mts,D-0.5)}catch(e){}
+            }
+          }else{
+            try{mainVideo.currentTime=Math.min(mts,D-0.5)}catch(e){}
           }
           if(mainVideo.paused){mainVideo.play().catch(function(){})}
           try{ctx.drawImage(mainVideo,0,0,vw,vh)}catch(e){}
