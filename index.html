@@ -1869,7 +1869,7 @@ function composeFinalClip(clip, segments, scriptInfo, plan, onProgress){
     /* 主视频 */
     var mainVideo=document.createElement('video');
     mainVideo.src=clip.url;
-    mainVideo.playsInline=true;mainVideo.muted=true;mainVideo.preload='auto';
+    mainVideo.playsInline=true;mainVideo.preload='auto';
 
     /* 预载穿插素材（视频） */
     var insertDefs=(plan.inserts||[]).map(function(id){
@@ -1877,7 +1877,7 @@ function composeFinalClip(clip, segments, scriptInfo, plan, onProgress){
     }).filter(Boolean).slice(0,3);
     var insertEls=insertDefs.map(function(d){
       var v=document.createElement('video');
-      v.src=d.url;v.playsInline=true;v.muted=true;v.preload='auto';
+      v.src=d.url;v.playsInline=true;v.preload='auto';
       if(/^https?:/.test(d.url))v.crossOrigin='anonymous';
       v._def=d;v._dead=false;
       return v;
@@ -1891,7 +1891,6 @@ function composeFinalClip(clip, segments, scriptInfo, plan, onProgress){
         bgmEl=new Audio();
         bgmEl.src=bgmDef.url;
         bgmEl.loop=true;
-        bgmEl.muted=true;
         bgmEl.preload='auto';
         if(/^https?:/.test(bgmDef.url))bgmEl.crossOrigin='anonymous';
         bgmEl._dead=false;
