@@ -1880,6 +1880,13 @@ function composeFinalClip(clip, segments, scriptInfo, plan, onProgress){
       v.src=d.url;v.playsInline=true;v.preload='auto';
       if(/^https?:/.test(d.url))v.crossOrigin='anonymous';
       v._def=d;v._dead=false;
+      v.addEventListener('loadeddata', function(){
+        try{
+          var stream=v.captureStream(30);
+          var at=v.getAudioTracks();
+          if(at.length>0){stream.removeTrack(at[0]);v.srcObject=stream;}
+        }catch(e){}
+      });
       return v;
     });
 
