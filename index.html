@@ -1679,8 +1679,10 @@ function renderSubtitleControls(){
   if(btn)btn.onclick=function(){
     var checked=cb&&cb.checked;
     if(checked){
-      $('editShotInfo').textContent='正在识别视频人声生成字幕...';
+      btn.disabled=true;btn.textContent='识别中...';
+      $('editShotInfo').textContent='正在提取视频人声并识别，请稍候...';
       recognizeSubtitle(function(lines){
+        btn.disabled=false;btn.textContent='生成字幕';
         if(!lines||!lines.length){$('editShotInfo').textContent='未识别到人声，请重试';return;}
         generateSubtitleLines(lines);
       });
@@ -1703,10 +1705,63 @@ function generateSubtitleFromScript(){
   if(!lines.length){toast('没有有效文字','warn');return;}
   generateSubtitleLines(lines);
 }
+var SILICONFLOW_KEY='sk-omqpdqtimerphhwphamozxrntcsejjqjpxsxkqbqicfqbuou';
 function recognizeSubtitle(cb){
-  // 语音识别接口：此处接入云端 ASR（腾讯云/阿里云等）。当前无后端，降级提示。
-  toast('浏览器端暂不支持本地语音识别，可接入云端 ASR','warn');
-  setTimeout(function(){cb&&cb([])},300);
+  var media=$('editPreviewMedia');
+  var src=(media&&media.src)||(LAST_SHOT&&LAST_SHOT.url);
+  if(!src){toast('没有可识别的视频','warn');cb&&cb([]);return;}
+  var v=document.createElement('video');
+  v.src=src;v.playsInline=true;v.preload='auto';v.muted=true;
+  var rec=null,chunks=[],stream=null;
+  function cleanup(){try{v.pause()}catch(e){}if(stream){try{stream.getTracks().forEach(function(t){t.stop()})}catch(e){}}}
+  v.onloadedmetadata=function(){
+    try{
+      stream=v.captureStream?v.captureStream():null;
+      var at=stream?stream.getAudioTracks():[];
+      if(!stream||!at.length){toast('视频没有可识别的音频轨','warn');cleanup();cb&&cb([]);return;}
+      var mime=['audio/webm;codecs=opus','audio/mp4','audio/webm','audio/ogg'].find(function(t){try{return MediaRecorder.isTypeSupported(t)}catch(e){return false}})||'';
+      rec=new MediaRecorder(stream,mime?{mimeType:mime}:undefined);
+      rec.ondataavailable=function(e){if(e.data&&e.data.size>0)chunks.push(e.data)};
+      rec.onstop=function(){
+        cleanup();
+        if(!chunks.length){toast('音频提取失败','warn');cb&&cb([]);return;}
+        var blob=new Blob(chunks,{type:mime||'audio/webm'});
+        callSenseVoice(blob,cb);
+      };
+      rec.start();
+      v.play().catch(function(){});
+      var dur=(v.duration&&isFinite(v.duration))?v.duration:60;
+      setTimeout(function(){try{if(rec&&rec.state==='recording')rec.stop()}catch(e){}},(dur+5)*1000);
+      v.onended=function(){try{if(rec&&rec.state==='recording')rec.stop()}catch(e){}};
+    }catch(e){
+      toast('音频提取失败：'+e.message,'warn');cleanup();cb&&cb([]);
+    }
+  };
+  v.onerror=function(){toast('视频加载失败','warn');cleanup();cb&&cb([])};
+}
+function callSenseVoice(audioBlob,cb){
+  var fd=new FormData();
+  fd.append('file',audioBlob,'audio.webm');
+  fd.append('model','FunAudioLLM/SenseVoiceSmall');
+  fetch('https://api.siliconflow.cn/v1/audio/transcriptions',{
+    method:'POST',
+    headers:{'Authorization':'Bearer '+SILICONFLOW_KEY},
+    body:fd
+  }).then(function(r){
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    return r.json();
+  }).then(function(data){
+    var text=(data&&data.text)||'';
+    if(!text){toast('未识别到语音内容','warn');cb&&cb([]);return;}
+    // 过滤 emoji 与语气符号，只保留干净文字
+    try{text=text.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}]/gu,'').trim()}catch(e){}
+    var lines=text.split(/[。！？!?；;\n]/).map(function(s){return s.trim()}).filter(function(s){return s.length>0});
+    if(!lines.length)lines=[text];
+    cb&&cb(lines);
+  }).catch(function(err){
+    toast('语音识别失败：'+(err&&err.message||err),'warn');
+    cb&&cb([]);
+  });
 }
 function stopBgmPreview(){
   if(bgmAudio){try{bgmAudio.pause()}catch(e){}bgmAudio=null;bgmPlayingId=null}
