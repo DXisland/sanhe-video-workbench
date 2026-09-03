@@ -1702,41 +1702,60 @@ function generateSubtitleFromScript(){
 }
 var SILICONFLOW_KEY='sk-omqpdqtimerphhwphamozxrntcsejjqjpxsxkqbqicfqbuou';
 function recognizeSubtitle(cb){
-  var media=$('editPreviewMedia');
-  var src=(media&&media.src)||(LAST_SHOT&&LAST_SHOT.url);
-  if(!src){toast('没有可识别的视频','warn');cb&&cb([]);return;}
+  var blob=LAST_SHOT&&LAST_SHOT.blob;
+  var src=(LAST_SHOT&&LAST_SHOT.url)||'';
+  if(!blob&&!src){toast('没有可识别的视频','warn');cb&&cb([]);return;}
+  if(blob){
+    if(blob.size/1048576<=45){callSenseVoice(blob,'video.mp4',cb);return;}
+    extractAndRecognize(blob,cb);return;
+  }
+  fetch(src).then(function(r){return r.blob()}).then(function(b){
+    if(b.size/1048576<=45){callSenseVoice(b,'video.mp4',cb);}
+    else{extractAndRecognize(b,cb);}
+  }).catch(function(){toast('视频读取失败，请重试','warn');cb&&cb([])});
+}
+function extractAndRecognize(videoBlob,cb){
+  var url=URL.createObjectURL(videoBlob);
   var v=document.createElement('video');
-  v.src=src;v.playsInline=true;v.preload='auto';v.muted=true;
-  var rec=null,chunks=[],stream=null;
-  function cleanup(){try{v.pause()}catch(e){}if(stream){try{stream.getTracks().forEach(function(t){t.stop()})}catch(e){}}}
+  v.src=url;v.playsInline=true;v.muted=true;v.preload='auto';
+  v.setAttribute('playsinline','');
+  var rec=null,chunks=[],actx=null;
+  var cleaned=false;
+  function cleanup(){
+    if(cleaned)return;cleaned=true;
+    try{v.pause()}catch(e){}
+    if(actx){try{actx.close()}catch(e){}}
+    try{URL.revokeObjectURL(url)}catch(e){}
+  }
   v.onloadedmetadata=function(){
     try{
-      stream=v.captureStream?v.captureStream():null;
-      var at=stream?stream.getAudioTracks():[];
-      if(!stream||!at.length){toast('视频没有可识别的音频轨','warn');cleanup();cb&&cb([]);return;}
+      actx=new (window.AudioContext||window.webkitAudioContext)();
+      var dest=actx.createMediaStreamDestination();
+      var srcNode=actx.createMediaElementSource(v);
+      srcNode.connect(dest);
       var mime=['audio/webm;codecs=opus','audio/mp4','audio/webm','audio/ogg'].find(function(t){try{return MediaRecorder.isTypeSupported(t)}catch(e){return false}})||'';
-      rec=new MediaRecorder(stream,mime?{mimeType:mime}:undefined);
+      rec=new MediaRecorder(dest.stream,mime?{mimeType:mime}:undefined);
       rec.ondataavailable=function(e){if(e.data&&e.data.size>0)chunks.push(e.data)};
       rec.onstop=function(){
         cleanup();
         if(!chunks.length){toast('音频提取失败','warn');cb&&cb([]);return;}
-        var blob=new Blob(chunks,{type:mime||'audio/webm'});
-        callSenseVoice(blob,cb);
+        var ab=new Blob(chunks,{type:mime||'audio/webm'});
+        callSenseVoice(ab,'audio.webm',cb);
       };
-      rec.start();
-      v.play().catch(function(){});
+      var startIt=function(){try{rec.start()}catch(e){}v.play().catch(function(){})};
+      if(actx.state==='suspended'){actx.resume().then(startIt).catch(startIt)}else{startIt()}
       var dur=(v.duration&&isFinite(v.duration))?v.duration:60;
-      setTimeout(function(){try{if(rec&&rec.state==='recording')rec.stop()}catch(e){}},(dur+5)*1000);
+      setTimeout(function(){try{if(rec&&rec.state==='recording')rec.stop()}catch(e){}},(dur+8)*1000);
       v.onended=function(){try{if(rec&&rec.state==='recording')rec.stop()}catch(e){}};
     }catch(e){
-      toast('音频提取失败：'+e.message,'warn');cleanup();cb&&cb([]);
+      toast('音频提取失败，请重试','warn');cleanup();cb&&cb([]);
     }
   };
   v.onerror=function(){toast('视频加载失败','warn');cleanup();cb&&cb([])};
 }
-function callSenseVoice(audioBlob,cb){
+function callSenseVoice(fileBlob,filename,cb){
   var fd=new FormData();
-  fd.append('file',audioBlob,'audio.webm');
+  fd.append('file',fileBlob,filename||'audio.webm');
   fd.append('model','FunAudioLLM/SenseVoiceSmall');
   fetch('https://api.siliconflow.cn/v1/audio/transcriptions',{
     method:'POST',
@@ -1748,7 +1767,6 @@ function callSenseVoice(audioBlob,cb){
   }).then(function(data){
     var text=(data&&data.text)||'';
     if(!text){toast('未识别到语音内容','warn');cb&&cb([]);return;}
-    // 过滤 emoji 与语气符号，只保留干净文字
     try{text=text.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}]/gu,'').trim()}catch(e){}
     var lines=text.split(/[。！？!?；;\n]/).map(function(s){return s.trim()}).filter(function(s){return s.length>0});
     if(!lines.length)lines=[text];
@@ -1819,6 +1837,13 @@ function startSynthesis(){
   editState='composing';
   stopBgmPreview();
   var media=$('editPreviewMedia');
+  if(media&&media.tagName==='VIDEO'){try{media.pause()}catch(e){}}
+  /* 用户手势内解锁 AudioContext（iOS 要求），保证合成期间声音不断 */
+  try{
+    var unlockAc=new (window.AudioContext||window.webkitAudioContext)();
+    if(unlockAc.state==='suspended'){unlockAc.resume().then(function(){try{unlockAc.close()}catch(e){}}).catch(function(){})}
+    else{try{unlockAc.close()}catch(e){}}
+  }catch(e){}
   $('editSaveBtn').disabled=true;
   $('editSynthOverlay').classList.remove('hide');
   $('editSynthStatus').classList.remove('hide');
@@ -1965,6 +1990,7 @@ function drawSubtitle(ctx,w,h,text){
 }
 
 /* 主合成函数：返回 Promise(url) - iOS/Edge 兼容版 */
+/* 主合成函数：返回 Promise(url) - iOS 兼容重写版 */
 function composeFinalClip(clip, segments, scriptInfo, plan, onProgress){
   return new Promise(function(resolve,reject){
     if(!clip||!clip.url){reject(new Error('no clip'));return;}
@@ -1977,23 +2003,19 @@ function composeFinalClip(clip, segments, scriptInfo, plan, onProgress){
     var mainVideo=document.createElement('video');
     mainVideo.src=clip.url;
     mainVideo.playsInline=true;mainVideo.preload='auto';
+    mainVideo.setAttribute('playsinline','');
 
-    /* 预载穿插素材（视频） */
+    /* 穿插素材：muted（只出画面，绝不发声、绝不抢音频焦点） */
     var insertDefs=(plan.inserts||[]).map(function(id){
       return MATERIAL_LIB.items.video.find(function(v){return v.id===id});
-    }).filter(Boolean).slice(0,3);
+    }).filter(Boolean).slice(0,2);
     var insertEls=insertDefs.map(function(d){
       var v=document.createElement('video');
       v.src=d.url;v.playsInline=true;v.preload='auto';
+      v.muted=true;
+      v.setAttribute('playsinline','');
       if(/^https?:/.test(d.url))v.crossOrigin='anonymous';
-      v._def=d;v._dead=false;
-      v.addEventListener('loadeddata', function(){
-        try{
-          var stream=v.captureStream(30);
-          var at=v.getAudioTracks();
-          if(at.length>0){stream.removeTrack(at[0]);v.srcObject=stream;}
-        }catch(e){}
-      });
+      v._dead=false;
       return v;
     });
 
@@ -2011,27 +2033,12 @@ function composeFinalClip(clip, segments, scriptInfo, plan, onProgress){
       }
     }
 
-    var audioCtx=null,audioDest=null,composeStarted=false,startTime=0,lastProgress=0,progressTimer=null,forceStopTimer=null,recorderTimeout=null;
+    var finished=false,startTime=0,progressTimer=null,forceStopTimer=null,matCheckTimer=null;
 
-    function initAudio(){
-      try{
-        audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-        audioDest=audioCtx.createMediaStreamDestination();
-        var mainSrc=audioCtx.createMediaElementSource(mainVideo);
-        mainSrc.connect(audioDest);
-        if(bgmEl&&!bgmEl._dead){
-          var bgmSrc=audioCtx.createMediaElementSource(bgmEl);
-          var bgmGain=audioCtx.createGain();bgmGain.gain.value=0.22;
-          bgmSrc.connect(bgmGain);bgmGain.connect(audioDest);
-        }
-      }catch(e){audioCtx=null;}
-    }
     function reportProgress(p){
-      if(p>lastProgress){
-        lastProgress=p;
-        if(onProgress)onProgress(p);
-      }
+      if(!finished&&onProgress)onProgress(Math.min(1,p));
     }
+
     function buildSubTimeline(duration){
       var tl=[];
       if(subtitleLines.length>0){
@@ -2049,117 +2056,163 @@ function composeFinalClip(clip, segments, scriptInfo, plan, onProgress){
     }
 
     function startCompose(){
-      if(composeStarted)return;composeStarted=true;
-      if(!audioCtx)initAudio();
       var vw=mainVideo.videoWidth||640,vh=mainVideo.videoHeight||480;
       var D=mainVideo.duration;
       if(!D||!isFinite(D)||D<=0)D=parseFloat(clip.duration)||10;
 
-      /* 可用穿插素材（加载失败自动剔除） */
+      /* 可用素材：加载失败的剔除；只有一个素材时两个插入点复用同一个 */
       var usable=[];
-      for(var i=0;i<insertEls.length;i++){if(!insertEls[i]._dead)usable.push({el:insertEls[i],def:insertDefs[i]})}
+      for(var i=0;i<insertEls.length;i++){if(!insertEls[i]._dead)usable.push(insertEls[i])}
+      var ins1=usable[0]||null;
+      var ins2=usable[1]||usable[0]||null;
 
-      /* 新逻辑：固定第4秒、第9秒各插入一段2-3秒素材（只换画面，声音不中断） */
-      var insertDurations=usable.map(function(u){return Math.random()*1000+2000|0;}).slice(0,2);
-      usable=usable.slice(0,2);
-      insertDurations=insertDurations.slice(0,2);
-      var dl1=insertDurations[0]||0;
-      var dl2=insertDurations[1]||0;
-      var INS1_S=4,INS1_E=4+dl1;
-      var INS2_S=9,INS2_E=9+dl2;
+      /* 固定插入点：第4秒、第9秒，时长严格2-3秒 */
+      var dl1=2000+Math.floor(Math.random()*1000);
+      var dl2=2000+Math.floor(Math.random()*1000);
+      var INS1_S=4,INS1_E=INS1_S+dl1/1000;
+      var INS2_S=9,INS2_E=INS2_S+dl2/1000;
 
-      /* 总时长=原始视频时长；主视频从头自然播放，音频贯穿始终 */
+      /* 总时长=原始视频时长；主视频从头自然播放，音频贯穿始终不中断 */
       var total=D;
       var subTimeline=buildSubTimeline(total);
 
-      var canvas=document.createElement('canvas');canvas.width=vw;canvas.height=vh;
+      /* 输出分辨率：最长边720，大幅降低绘制/编码负担，画面流畅 */
+      var scale=Math.min(1,720/Math.max(vw,vh));
+      var cw=Math.max(2,Math.round(vw*scale)),ch=Math.max(2,Math.round(vh*scale));
+      var canvas=document.createElement('canvas');canvas.width=cw;canvas.height=ch;
       var ctx=canvas.getContext('2d');
       var stream=canvas.captureStream(30);
-      if(audioDest&&audioDest.stream){
-        var aTracks=audioDest.stream.getAudioTracks();
-        for(var ai=0;ai<aTracks.length;ai++)stream.addTrack(aTracks[ai]);
-      }
-      var mimeType=['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'].find(function(t){
+
+      /* 音频：主视频人声 + BGM 同时进录制流和扬声器 */
+      var audioCtx=null,audioDest=null;
+      try{
+        audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+        audioDest=audioCtx.createMediaStreamDestination();
+        var mainSrc=audioCtx.createMediaElementSource(mainVideo);
+        var mainOut=audioCtx.createGain();mainOut.gain.value=1;
+        mainSrc.connect(mainOut);
+        mainOut.connect(audioDest);
+        mainOut.connect(audioCtx.destination);
+        if(bgmEl&&!bgmEl._dead){
+          var bgmSrc=audioCtx.createMediaElementSource(bgmEl);
+          var bgmGain=audioCtx.createGain();bgmGain.gain.value=0.22;
+          bgmSrc.connect(bgmGain);
+          bgmGain.connect(audioDest);
+          bgmGain.connect(audioCtx.destination);
+        }
+        var at=audioDest.stream.getAudioTracks();
+        for(var ai=0;ai<at.length;ai++)stream.addTrack(at[ai]);
+        /* iOS 可能挂起 AudioContext，自动恢复 */
+        audioCtx.addEventListener('statechange',function(){
+          if(!finished&&audioCtx&&audioCtx.state==='suspended'){audioCtx.resume().catch(function(){})}
+        });
+      }catch(e){audioCtx=null;audioDest=null;}
+
+      var mimeType=['video/mp4','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'].find(function(t){
         try{return MediaRecorder.isTypeSupported(t)}catch(e){return false}
       })||'';
       var recorder;
-      try{recorder=mimeType?new MediaRecorder(stream,{mimeType:mimeType}):new MediaRecorder(stream);}
-      catch(e){recorder=new MediaRecorder(stream);}
+      try{
+        var opts=mimeType?{mimeType:mimeType}:{};
+        try{opts.videoBitsPerSecond=3e6}catch(e){}
+        recorder=new MediaRecorder(stream,opts);
+      }catch(e){recorder=new MediaRecorder(stream);}
       var chunks=[];recorder.ondataavailable=function(e){if(e.data&&e.data.size>0)chunks.push(e.data);};
       recorder.onstop=function(){
         if(progressTimer)clearInterval(progressTimer);
         if(forceStopTimer)clearTimeout(forceStopTimer);
-        if(audioCtx&&audioCtx.state!=='closed'){try{audioCtx.close();}catch(e){}}
+        if(matCheckTimer)clearInterval(matCheckTimer);
+        if(audioCtx&&audioCtx.state!=='closed'){try{audioCtx.close()}catch(e){}}
         var blob=new Blob(chunks,{type:(chunks[0]&&chunks[0].type)||mimeType||'video/webm'});
         var url=URL.createObjectURL(blob);resolve(url);
       };
-      
-      /* 兜底：如果 recorder 异常导致 onstop 不触发，直接用现有 chunks resolve */
-      var recorderTimeout=setTimeout(function(){
-        if(!finished && chunks.length>0){
-          finished=true;
-          if(progressTimer)clearInterval(progressTimer);
-          if(forceStopTimer)clearTimeout(forceStopTimer);
-          var blob=new Blob(chunks,{type:(chunks[0]&&chunks[0].type)||mimeType||'video/webm'});
-          var url=URL.createObjectURL(blob);
-          resolve(url);
-        }
-      },(total+10)*1000);
 
-      var finished=false;
-      var compStart=performance.now();
+      /* 文字图层预渲染缓存：标题/字幕各渲染一次，之后每帧直接贴图 */
+      var titleLayer=null;
+      function getTitleLayer(){
+        if(!bigTitle)return null;
+        if(titleLayer)return titleLayer;
+        var c=document.createElement('canvas');c.width=cw;c.height=ch;
+        drawTitle(c.getContext('2d'),cw,ch,bigTitle);
+        titleLayer=c;return c;
+      }
+      var subLayer=null,subLayerText='';
+      function getSubLayer(text){
+        if(!text)return null;
+        if(subLayer&&subLayerText===text)return subLayer;
+        var c=document.createElement('canvas');c.width=cw;c.height=ch;
+        drawSubtitle(c.getContext('2d'),cw,ch,text);
+        subLayer=c;subLayerText=text;
+        return c;
+      }
+      setTimeout(function(){getTitleLayer()},50);
+
       function finishNow(){
         if(finished)return;
         finished=true;
         if(progressTimer)clearInterval(progressTimer);
         if(forceStopTimer)clearTimeout(forceStopTimer);
-        if(recorderTimeout)clearTimeout(recorderTimeout);
+        if(matCheckTimer)clearInterval(matCheckTimer);
         if(recorder.state==='recording')recorder.stop();
         reportProgress(1);
       }
+
+      var compStart=performance.now();
       function drawFrame(now){
         if(finished)return;
-        var ct=(now-compStart)/1000;
-        if(ct>=total-0.06){
-          try{ctx.drawImage(mainVideo,0,0,vw,vh)}catch(e){}
+        /* 进度完全由主视频播放进度驱动，不用墙钟，保证成片完整 */
+        var mt=mainVideo.currentTime;
+        if(!isFinite(mt)||mt<0)mt=(now-compStart)/1000;
+        if(mainVideo.ended||mt>=total-0.05){
+          try{ctx.drawImage(mainVideo,0,0,cw,ch)}catch(e){}
           finishNow();
           return;
         }
-        /* 主视频持续播放（不seek），音频贯穿始终 */
+        /* 主视频持续播放，音频贯穿始终 */
         if(mainVideo.paused){mainVideo.play().catch(function(){})}
-        /* 判断当前画面源：插入区间用素材，其余用主视频 */
         var iv=null;
-        if(usable[0]&&ct>=INS1_S&&ct<INS1_E)iv=usable[0].el;
-        else if(usable[1]&&ct>=INS2_S&&ct<INS2_E)iv=usable[1].el;
+        if(ins1&&mt>=INS1_S&&mt<INS1_E)iv=ins1;
+        else if(ins2&&mt>=INS2_S&&mt<INS2_E)iv=ins2;
         if(iv&&iv.readyState>=2){
           if(iv.paused){iv.play().catch(function(){})}
-          try{ctx.drawImage(iv,0,0,vw,vh)}catch(e){try{ctx.drawImage(mainVideo,0,0,vw,vh)}catch(e){}}
+          try{ctx.drawImage(iv,0,0,cw,ch)}catch(e){try{ctx.drawImage(mainVideo,0,0,cw,ch)}catch(e){}}
         }else{
-          try{ctx.drawImage(mainVideo,0,0,vw,vh)}catch(e){}
+          try{ctx.drawImage(mainVideo,0,0,cw,ch)}catch(e){}
         }
-        /* 暂停不在插入区间的素材 */
-        for(var pi=0;pi<usable.length;pi++){var pv=usable[pi].el;if(pv!==iv&&!pv.paused)try{pv.pause()}catch(e){}}
-        if(bigTitle)drawTitle(ctx,vw,vh,bigTitle);
+        var tl=getTitleLayer();
+        if(tl)ctx.drawImage(tl,0,0);
         var cur='';
         for(var ti=0;ti<subTimeline.length;ti++){
-          if(ct>=subTimeline[ti].start&&ct<subTimeline[ti].end){cur=subTimeline[ti].text;break;}
+          if(mt>=subTimeline[ti].start&&mt<subTimeline[ti].end){cur=subTimeline[ti].text;break;}
         }
-        if(cur)drawSubtitle(ctx,vw,vh,cur);
-        reportProgress(Math.min(1,ct/total));
+        var sl=getSubLayer(cur);
+        if(sl)ctx.drawImage(sl,0,0);
+        reportProgress(mt/total);
         requestAnimationFrame(drawFrame);
       }
 
-      recorder.start(200);
+      /* 低频检查：素材离开插入区间立即暂停（不做每帧 pause，避免卡顿） */
+      matCheckTimer=setInterval(function(){
+        if(finished)return;
+        var mt=mainVideo.currentTime;
+        [ins1,ins2].forEach(function(v){
+          if(!v||v.paused)return;
+          var in1=(ins1===v&&mt>=INS1_S&&mt<INS1_E);
+          var in2=(ins2===v&&mt>=INS2_S&&mt<INS2_E);
+          if(!in1&&!in2){v.pause()}
+        });
+      },100);
+
+      recorder.start(250);
       startTime=Date.now();
-      /* 墙钟兜底进度：永不卡死 */
+      /* 进度上报：基于主视频播放时间 */
       progressTimer=setInterval(function(){
         if(finished)return;
-        var elapsed=(Date.now()-startTime)/1000;
-        var p=Math.min(1,elapsed/total);
-        if(p>lastProgress)reportProgress(p);
-        if(elapsed>total+3)finishNow();
-      },250);
-      forceStopTimer=setTimeout(finishNow,(total+8)*1000);
+        var mt=mainVideo.currentTime;
+        if(isFinite(mt)&&mt>0)reportProgress(mt/total);
+      },300);
+      /* 兜底：主视频彻底卡死才强制结束（正常情况下主视频播完触发 finishNow） */
+      forceStopTimer=setTimeout(finishNow,(total+20)*1000);
 
       var playFunc=function(){
         mainVideo.play().catch(function(){});
@@ -2172,7 +2225,7 @@ function composeFinalClip(clip, segments, scriptInfo, plan, onProgress){
       }else{playFunc();}
     }
 
-    /* 加载协调：主视频 + 穿插素材 + BGM 全部就绪（或失败）后开始 */
+    /* 加载协调：主视频 + 素材 + BGM 全部就绪（或失败）后开始 */
     var pending=1+insertEls.length+(bgmEl?1:0);
     var loadStarted=false;
     function maybeStart(){
