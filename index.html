@@ -2039,21 +2039,21 @@ function composeFinalClip(clip, segments, scriptInfo, plan, onProgress){
       if(!finished&&onProgress)onProgress(Math.min(1,p));
     }
 
-    function buildSubTimeline(duration){
-      var tl=[];
-      if(subtitleLines.length>0){
-        var totalChars=subtitleLines.reduce(function(sum,l){return sum+l.length;},0);
-        if(totalChars<=0)totalChars=subtitleLines.length;
-        var subTotal=duration*0.9;if(subTotal>duration-0.5)subTotal=duration-0.5;
-        var accTime=duration-subTotal;
-        for(var si=0;si<subtitleLines.length;si++){
-          var ratio=subtitleLines[si].length/totalChars;
-          var segDur=subTotal*ratio;
-          tl.push({text:subtitleLines[si],start:accTime,end:accTime+segDur});accTime+=segDur;
-        }
-      }
-      return tl;
+function buildSubTimeline(duration){
+  var tl=[];
+  if(subtitleLines.length>0){
+    var totalChars=subtitleLines.reduce(function(sum,l){return sum+l.length;},0);
+    if(totalChars<=0)totalChars=subtitleLines.length;
+    var subTotal=duration;  // 完全用于字幕，从视频开头开始
+    var accTime=0;  // 从视频开头开始，而不是从后半段
+    for(var si=0;si<subtitleLines.length;si++){
+      var ratio=subtitleLines[si].length/totalChars;
+      var segDur=subTotal*ratio;
+      tl.push({text:subtitleLines[si],start:accTime,end:accTime+segDur});accTime+=segDur;
     }
+  }
+  return tl;
+}
 
     function startCompose(){
       var vw=mainVideo.videoWidth||640,vh=mainVideo.videoHeight||480;
