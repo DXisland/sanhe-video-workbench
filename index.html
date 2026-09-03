@@ -1673,21 +1673,16 @@ function renderSubtitleControls(){
   }
   wrap.innerHTML='<label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink);cursor:pointer">'
     +'<input type="checkbox" id="subtitleGenCb" style="width:16px;height:16px;accent-color:#B80000">'
-    +'<span>识别生成字幕</span></label>'
-    +'<button id="genSubtitleBtn" class="abtn ghost" style="margin-left:auto;padding:6px 14px;font-size:13px">生成字幕</button>';
-  var cb=$('subtitleGenCb'),btn=$('genSubtitleBtn');
-  if(btn)btn.onclick=function(){
+    +'<span>识别生成</span></label>';
+  var cb=$('subtitleGenCb');
+  cb.onchange=function(){
     var checked=cb&&cb.checked;
     if(checked){
-      btn.disabled=true;btn.textContent='识别中...';
       $('editShotInfo').textContent='正在提取视频人声并识别，请稍候...';
       recognizeSubtitle(function(lines){
-        btn.disabled=false;btn.textContent='生成字幕';
         if(!lines||!lines.length){$('editShotInfo').textContent='未识别到人声，请重试';return;}
         generateSubtitleLines(lines);
       });
-    }else{
-      generateSubtitleFromScript();
     }
   };
 }
