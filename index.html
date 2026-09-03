@@ -1964,7 +1964,7 @@ function drawTitle(ctx,w,h,title){
 /* 绘制字幕：底部安全区，白字/关键词黄色+粗黑描边，最多2行 */
 function drawSubtitle(ctx,w,h,text){
   if(!text)return;
-  var fontSize=Math.round(h*0.055);
+  var fontSize=Math.round(h*0.045);
   var strokeW=Math.round(fontSize*0.15);
   ctx.save();
   ctx.font='900 '+fontSize+'px "PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
@@ -2184,6 +2184,10 @@ function composeFinalClip(clip, segments, scriptInfo, plan, onProgress){
         var cur='';
         for(var ti=0;ti<subTimeline.length;ti++){
           if(mt>=subTimeline[ti].start&&mt<subTimeline[ti].end){cur=subTimeline[ti].text;break;}
+        }
+        /* 兜底：如果当前时间已超出所有字幕区间，显示最后一条 */
+        if(!cur&&subTimeline.length>0&&mt>=subTimeline[subTimeline.length-1].end){
+          cur=subTimeline[subTimeline.length-1].text;
         }
         var sl=getSubLayer(cur);
         if(sl)ctx.drawImage(sl,0,0);
