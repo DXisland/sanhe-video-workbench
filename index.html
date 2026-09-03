@@ -1768,7 +1768,24 @@ function callSenseVoice(fileBlob,filename,cb){
     var text=(data&&data.text)||'';
     if(!text){toast('未识别到语音内容','warn');cb&&cb([]);return;}
     try{text=text.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}]/gu,'').trim()}catch(e){}
-    var lines=text.split(/[。！？!?；;\n]/).map(function(s){return s.trim()}).filter(function(s){return s.length>0});
+    /* 按所有常见标点拆分（含逗号），确保整段话被拆成多条字幕 */
+    var raw=text.split(/[。！？!?；;，,、\n]/).map(function(s){return s.trim()}).filter(function(s){return s.length>0});
+    var lines=[];
+    raw.forEach(function(s){
+      /* 过长片段按12字再切分，保证字幕不长 */
+      while(s.length>12){
+        lines.push(s.substring(0,12));
+        s=s.substring(12);
+      }
+      if(s.length>0){
+        /* 过短片段并入上一条，避免单字字幕 */
+        if(lines.length>0&&lines[lines.length-1].length<5){
+          lines[lines.length-1]+=s;
+        }else{
+          lines.push(s);
+        }
+      }
+    });
     if(!lines.length)lines=[text];
     cb&&cb(lines);
   }).catch(function(err){
