@@ -1930,23 +1930,43 @@ function teardownCam(){
 /* 关键词高亮列表 */
 var SUBTITLE_KEYWORDS=['江西','400','是真的','华为','真实有效','50抵400','1元','9块9','59','99','360','划算','省钱','优惠','补贴','小天才','手机','宽带','团购','代金券','手表','九江','南昌','赣州','上饶','宜春','吉安','抚州','萍乡','新余','鹰潭','景德镇'];
 
-/* 文字自动换行 */
+/* 文字智能换行：按标点和词边界分句，不拆开词语 */
 function wrapText(ctx,text,maxChars){
   if(!text)return[];
-  var sentences=text.split(/([，。！？，！？])/).filter(function(s){return s.length>0});
-  var result=[],current='';
-  for(var i=0;i<sentences.length;i++){
-    var s=sentences[i];
-    if((current+s).length<=maxChars){current+=s;}
-    else{
-      if(current)result.push(current);
-      if(s.length>maxChars){
-        for(var j=0;j<s.length;j+=maxChars)result.push(s.substr(j,maxChars));
-        current='';
-      }else{current=s;}
+  /* 按标点先分段 */
+  var parts=text.split(/([，。！？,!?;；\n])/).filter(function(s){return s.length>0});
+  var result=[];
+  for(var i=0;i<parts.length;i++){
+    var p=parts[i];
+    /* 标点符号附着到前一段末尾 */
+    if(/[，。！？,!?;；\n]/.test(p)){
+      if(result.length>0){result[result.length-1]+=p;}
+      continue;
     }
+    if(p.length<=maxChars){result.push(p);continue;}
+    /* 超长段：按词边界智能切分 */
+    var remaining=p;
+    while(remaining.length>maxChars){
+      var cutAt=-1;
+      for(var c=maxChars;c>=Math.max(0,maxChars-6);c--){
+        var ch=remaining.charAt(c);
+        var next=remaining.charAt(c+1)||'';
+        /* 优先在标点处断 */
+        if(/[，。！？,!?;；]/.test(ch)){cutAt=c+1;break;}
+        /* 词边界：当前字是常见词尾，下一字是常见词头 */
+        if(/[\u4e00-\u9fa5]/.test(ch)&&/[\u4e00-\u9fa5]/.test(next)){
+          var tail=ch;var head=next;
+          var tailChars='的了是在有和与或也不人都会到说要可她他这那被把让给能过下上来机表店元块折优惠';
+          var headChars='的了是在有和与或也不人都会到说要可她他这那被把让给能过下上来今明这那每各一三四五六七八九十百千万亿小天才手';
+          if(tailChars.indexOf(tail)>=0||headChars.indexOf(head)>=0){cutAt=c+1;break;}
+        }
+      }
+      if(cutAt<=0)cutAt=maxChars;
+      result.push(remaining.substring(0,cutAt));
+      remaining=remaining.substring(cutAt);
+    }
+    if(remaining.length>0)result.push(remaining);
   }
-  if(current)result.push(current);
   return result;
 }
 
@@ -1959,14 +1979,7 @@ function drawTitle(ctx,w,h,title){
   ctx.font='900 '+fontSize+'px "PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
   ctx.textAlign='center';ctx.textBaseline='top';
   var x=w/2;
-  var titleLines=title.split('\n');
-  if(titleLines.length===1){
-    var maxChars=Math.floor(w*0.85/fontSize);
-    if(title.length>maxChars){
-      var mid=Math.ceil(title.length/2);
-      titleLines=[title.substring(0,mid),title.substring(mid)];
-    }
-  }
+  var titleLines=wrapText(ctx,title,Math.floor(w*0.85/fontSize));
   var startY=Math.round(h*0.06);
   var lineHeight=fontSize*1.15;
   titleLines.forEach(function(line,idx){
@@ -1978,7 +1991,7 @@ function drawTitle(ctx,w,h,title){
   ctx.restore();
 }
 
-/* 绘制字幕：底部安全区，白字/关键词黄色+粗黑描边，最多2行 */
+/* 绘制字幕：底部安全区，白字/关键词黄色+粗黑描边，默认1行，超长智能分2行 */
 function drawSubtitle(ctx,w,h,text){
   if(!text)return;
   var fontSize=Math.round(h*0.045);
@@ -1988,10 +2001,7 @@ function drawSubtitle(ctx,w,h,text){
   ctx.textAlign='center';ctx.textBaseline='bottom';
   var maxChars=Math.floor(w*0.82/fontSize);
   var lines=wrapText(ctx,text,maxChars);
-  if(lines.length>2){
-    lines=lines.slice(0,2);
-    lines[1]=lines[1].replace(/[。！？!?，,、；;：:…]+$/,'')+'\u2026';
-  }
+  if(lines.length>2)lines=lines.slice(0,2);
   var lineHeight=fontSize*1.3;
   var totalH=lines.length*lineHeight;
   var startY=h-Math.round(h*0.08)-totalH+lineHeight;
