@@ -1903,18 +1903,6 @@ function startSynthesis(){
   stopBgmPreview();
   var media=$('editPreviewMedia');
   if(media&&media.tagName==='VIDEO'){try{media.pause()}catch(e){}}
-  var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
-  if(isIOS){
-    LAST_SHOT.finalUrl=LAST_SHOT.url;
-    media.src=LAST_SHOT.url;
-    showSubtitleOverlays(media);
-    $('editSaveBtn').disabled=false;
-    $('editSaveBtn').textContent='保存成片';
-    editState='done';
-    $('editShotInfo').textContent='视频已就绪（字幕将以叠加方式显示），可直接保存';
-    toast('视频已就绪','good');
-    return;
-  }
   /* 用户手势内解锁 AudioContext（iOS 要求），保证合成期间声音不断 */
   try{
     var unlockAc=new (window.AudioContext||window.webkitAudioContext)();
@@ -2129,9 +2117,8 @@ function buildSubTimeline(duration){
   if(subtitleLines.length>0){
     var totalChars=subtitleLines.reduce(function(sum,l){return sum+l.length;},0);
     if(totalChars<=0)totalChars=subtitleLines.length;
-    var speechDelay=Math.min(0.5,duration*0.03);
-    var subTotal=duration-speechDelay;
-    var accTime=speechDelay;
+    var subTotal=duration;
+    var accTime=0;
     for(var si=0;si<subtitleLines.length;si++){
       var ratio=subtitleLines[si].length/totalChars;
       var segDur=subTotal*ratio;
@@ -2194,7 +2181,7 @@ function buildSubTimeline(duration){
         });
       }catch(e){audioCtx=null;audioDest=null;}
 
-      var mimeType=['video/webm;codecs=vp8,opus','video/webm;codecs=vp9,opus','video/webm','video/mp4'].find(function(t){
+      var mimeType=['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/webm;codecs=vp8,opus','video/webm;codecs=vp9,opus','video/webm'].find(function(t){
         try{return MediaRecorder.isTypeSupported(t)}catch(e){return false}
       })||'';
       var recorder;
