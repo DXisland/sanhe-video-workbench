@@ -1709,6 +1709,45 @@ function generateSubtitleFromScript(){
   if(!lines.length){toast('没有有效文字','warn');return;}
   generateSubtitleLines(lines);
 }
+function showSubtitleOverlays(videoEl){
+  var genSub=window._generatedSubtitles||[];
+  if(!genSub.length)return;
+  var totalChars=genSub.reduce(function(s,l){return s+l.length;},0);
+  if(totalChars<=0)totalChars=genSub.length;
+  var duration=videoEl.duration||10;
+  var speechDelay=Math.min(0.5,duration*0.03);
+  var subTotal=duration-speechDelay;
+  var tl=[];var acc=speechDelay;
+  for(var i=0;i<genSub.length;i++){
+    var ratio=genSub[i].length/totalChars;
+    var dur=subTotal*ratio;
+    tl.push({text:genSub[i],start:acc,end:acc+dur});
+    acc+=dur;
+  }
+  var wrap=videoEl.parentNode;
+  wrap.style.position='relative';
+  var old=document.getElementById('iosSubOverlay');if(old)old.remove();
+  var ov=document.createElement('div');
+  ov.id='iosSubOverlay';
+  ov.style.cssText='position:absolute;bottom:8%;left:0;right:0;text-align:center;pointer-events:none;z-index:5;';
+  ov.innerHTML='<span id="iosSubText" style="display:inline-block;padding:4px 14px;border-radius:8px;background:rgba(0,0,0,.55);color:#fff;font-size:16px;font-weight:700;line-height:1.4;max-width:90%;word-break:break-word"></span>';
+  wrap.appendChild(ov);
+  var subEl=document.getElementById('iosSubText');
+  var curIdx=-1;
+  function updateSub(){
+    var t=videoEl.currentTime;
+    var idx=-1;
+    for(var i=0;i<tl.length;i++){if(t>=tl[i].start&&t<tl[i].end){idx=i;break;}}
+    if(idx===-1&&tl.length>0&&t>=tl[tl.length-1].end)idx=tl.length-1;
+    if(idx!==curIdx){
+      curIdx=idx;
+      subEl.textContent=idx>=0?tl[idx].text:'';
+      ov.style.display=idx>=0?'block':'none';
+    }
+  }
+  videoEl.ontimeupdate=updateSub;
+  updateSub();
+}
 var SILICONFLOW_KEY='sk-omqpdqtimerphhwphamozxrntcsejjqjpxsxkqbqicfqbuou';
 function recognizeSubtitle(cb){
   var blob=LAST_SHOT&&LAST_SHOT.blob;
@@ -1864,6 +1903,18 @@ function startSynthesis(){
   stopBgmPreview();
   var media=$('editPreviewMedia');
   if(media&&media.tagName==='VIDEO'){try{media.pause()}catch(e){}}
+  var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  if(isIOS){
+    LAST_SHOT.finalUrl=LAST_SHOT.url;
+    media.src=LAST_SHOT.url;
+    showSubtitleOverlays(media);
+    $('editSaveBtn').disabled=false;
+    $('editSaveBtn').textContent='保存成片';
+    editState='done';
+    $('editShotInfo').textContent='视频已就绪（字幕将以叠加方式显示），可直接保存';
+    toast('视频已就绪','good');
+    return;
+  }
   /* 用户手势内解锁 AudioContext（iOS 要求），保证合成期间声音不断 */
   try{
     var unlockAc=new (window.AudioContext||window.webkitAudioContext)();
@@ -1879,7 +1930,6 @@ function startSynthesis(){
   var info=window._shootScriptInfo||{};
   composeFinalClip(LAST_SHOT,segs,info,EDIT_PLAN,function(prog){
     var pct=Math.round(prog*100);
-    var elapsed=((Date.now()-startTime)/1000).toFixed(1);
     $('editSynthBar').style.width=pct+'%';
     $('editSynthText').textContent='正在合成成片... '+pct+'%';
   }).then(function(finalUrl){
@@ -2529,8 +2579,9 @@ function loop(){
     if(editState==='ready'){startSynthesis();return}
     if(editState==='composing'){toast('正在合成中，请稍候','warn');return}
     var url=clip.finalUrl||clip.url;
+    var ext=(url.indexOf('.mp4')>=0)?'.mp4':'.webm';
     var a=document.createElement('a');a.href=url;
-    a.download='成片_'+new Date().toLocaleString('zh-CN',{hour12:false}).replace(/[/:\s]/g,'-')+'.webm';
+    a.download='成片_'+new Date().toLocaleString('zh-CN',{hour12:false}).replace(/[/:\s]/g,'-')+ext;
     a.click();toast('已开始保存成片','good');
   });
   $('editRetakeBtn').addEventListener('click',function(){
