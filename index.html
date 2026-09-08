@@ -1709,58 +1709,99 @@ function generateSubtitleFromScript(){
   if(!lines.length){toast('没有有效文字','warn');return;}
   generateSubtitleLines(lines);
 }
-function showSubtitleOverlays(videoEl){
-  var genSub=window._generatedSubtitles||[];
-  if(!genSub.length)return;
-  var totalChars=genSub.reduce(function(s,l){return s+l.length;},0);
-  if(totalChars<=0)totalChars=genSub.length;
-  var duration=videoEl.duration||10;
-  var speechDelay=Math.min(0.5,duration*0.03);
-  var subTotal=duration-speechDelay;
-  var tl=[];var acc=speechDelay;
-  for(var i=0;i<genSub.length;i++){
-    var ratio=genSub[i].length/totalChars;
-    var dur=subTotal*ratio;
-    tl.push({text:genSub[i],start:acc,end:acc+dur});
-    acc+=dur;
-  }
-  var wrap=videoEl.parentNode;
-  wrap.style.position='relative';
-  var old=document.getElementById('iosSubOverlay');if(old)old.remove();
-  var ov=document.createElement('div');
-  ov.id='iosSubOverlay';
-  ov.style.cssText='position:absolute;bottom:8%;left:0;right:0;text-align:center;pointer-events:none;z-index:5;';
-  ov.innerHTML='<span id="iosSubText" style="display:inline-block;padding:4px 14px;border-radius:8px;background:rgba(0,0,0,.55);color:#fff;font-size:16px;font-weight:700;line-height:1.4;max-width:90%;word-break:break-word"></span>';
-  wrap.appendChild(ov);
-  var subEl=document.getElementById('iosSubText');
-  var curIdx=-1;
-  function updateSub(){
-    var t=videoEl.currentTime;
-    var idx=-1;
-    for(var i=0;i<tl.length;i++){if(t>=tl[i].start&&t<tl[i].end){idx=i;break;}}
-    if(idx===-1&&tl.length>0&&t>=tl[tl.length-1].end)idx=tl.length-1;
-    if(idx!==curIdx){
-      curIdx=idx;
-      subEl.textContent=idx>=0?tl[idx].text:'';
-      ov.style.display=idx>=0?'block':'none';
+function vadSegments(audioBuffer){
+  try{
+    var sr=audioBuffer.sampleRate;
+    var data=audioBuffer.getChannelData(0);
+    var frameSize=Math.max(64,Math.floor(sr*0.05));
+    var n=Math.floor(data.length/frameSize);
+    var rms=[];
+    for(var i=0;i<n;i++){
+      var s=0;
+      for(var j=0;j<frameSize;j++){var v=data[i*frameSize+j];s+=v*v;}
+      rms.push(Math.sqrt(s/frameSize));
     }
+    if(!rms.length)return null;
+    var sorted=rms.slice().sort(function(a,b){return a-b});
+    var noise=Math.max(sorted[Math.floor(sorted.length*0.15)],1e-4);
+    var th=Math.max(noise*3,0.02);
+    var frames=[];
+    for(var i=0;i<n;i++)frames.push(rms[i]>th);
+    var minGap=Math.ceil(0.3*sr/frameSize);
+    var minSeg=Math.ceil(0.18*sr/frameSize);
+    var segs=[],start=-1;
+    for(var i=0;i<=n;i++){
+      var on=i<n&&frames[i];
+      if(on&&start<0)start=i;
+      if(!on&&start>=0){
+        if(i-start>=minSeg){
+          if(segs.length&&start-segs[segs.length-1].e<=minGap){
+            segs[segs.length-1].e=i;
+          }else{
+            segs.push({s:start,e:i});
+          }
+        }
+        start=-1;
+      }
+    }
+    if(start>=0&&n-start>=minSeg){
+      if(segs.length&&start-segs[segs.length-1].e<=minGap)segs[segs.length-1].e=n;
+      else segs.push({s:start,e:n});
+    }
+    if(!segs.length)return null;
+    return segs.map(function(sg){
+      return {start:(sg.s*frameSize)/sr,end:(Math.min(sg.e*frameSize,data.length))/sr};
+    });
+  }catch(e){return null;}
+}
+function chunkSmart(text,maxLen){
+  if(!text)return[];
+  var tailChars='的了是在有和与或也不人都会到说要可她他这那被把让给能过下上来机表店元块折优惠';
+  var headChars='的了是在有和与或也不人都会到说要可她他这那被把让给能过下上来今明这那每各一三四五六七八九十百千万亿小天才手';
+  var pieces=[],remaining=text;
+  while(remaining.length>maxLen){
+    var cut=maxLen;
+    for(var c=maxLen;c>=maxLen-4&&c>0;c--){
+      var ch=remaining.charAt(c-1);
+      var next=remaining.charAt(c)||'';
+      if(/[，。！？!?；;、]/.test(ch)){cut=c;break;}
+      if(tailChars.indexOf(ch)>=0||(next&&headChars.indexOf(next)>=0)){cut=c;break;}
+    }
+    pieces.push(remaining.substring(0,cut));
+    remaining=remaining.substring(cut);
   }
-  videoEl.ontimeupdate=updateSub;
-  updateSub();
+  if(remaining.length>0)pieces.push(remaining);
+  return pieces;
 }
 var SILICONFLOW_KEY='sk-omqpdqtimerphhwphamozxrntcsejjqjpxsxkqbqicfqbuou';
 function recognizeSubtitle(cb){
   var blob=LAST_SHOT&&LAST_SHOT.blob;
   var src=(LAST_SHOT&&LAST_SHOT.url)||'';
   if(!blob&&!src){toast('没有可识别的视频','warn');cb&&cb([]);return;}
+  window._speechSegments=null;
   if(blob){
+    analyzeSpeechSegments(blob);
     if(blob.size/1048576<=45){callSenseVoice(blob,'video.mp4',cb);return;}
     extractAndRecognize(blob,cb);return;
   }
   fetch(src).then(function(r){return r.blob()}).then(function(b){
+    analyzeSpeechSegments(b);
     if(b.size/1048576<=45){callSenseVoice(b,'video.mp4',cb);}
     else{extractAndRecognize(b,cb);}
   }).catch(function(){toast('视频读取失败，请重试','warn');cb&&cb([])});
+}
+/* VAD：解码视频音轨，检测说话分段（供字幕时间轴对齐用） */
+function analyzeSpeechSegments(blob){
+  try{
+    var actx=new (window.AudioContext||window.webkitAudioContext)();
+    blob.arrayBuffer().then(function(buf){
+      actx.decodeAudioData(buf.slice(0),function(audioBuffer){
+        var segs=vadSegments(audioBuffer);
+        if(segs&&segs.length)window._speechSegments=segs;
+        actx.close();
+      },function(){actx.close();});
+    }).catch(function(){actx.close();});
+  }catch(e){}
 }
 function extractAndRecognize(videoBlob,cb){
   var url=URL.createObjectURL(videoBlob);
@@ -2114,15 +2155,61 @@ function composeFinalClip(clip, segments, scriptInfo, plan, onProgress){
 
 function buildSubTimeline(duration){
   var tl=[];
-  if(subtitleLines.length>0){
-    var totalChars=subtitleLines.reduce(function(sum,l){return sum+l.length;},0);
-    if(totalChars<=0)totalChars=subtitleLines.length;
-    var subTotal=duration;
+  if(subtitleLines.length===0)return tl;
+  var fullText=subtitleLines.join('');
+  var totalChars=fullText.length||1;
+  var segs=window._speechSegments;
+  if(segs&&segs.length>0){
+    var one2one=(subtitleLines.length===segs.length);
+    if(one2one){
+      /* 句子数与语音段数一致：一一对应，完美对齐 */
+      subtitleLines.forEach(function(line,li){
+        var seg=segs[li];
+        var pieces=chunkSmart(line,10);
+        var segChars=line.length||1;
+        var accT=seg.start;
+        for(var pi=0;pi<pieces.length;pi++){
+          var pd=(seg.end-seg.start)*pieces[pi].length/segChars;
+          tl.push({text:pieces[pi],start:accT,end:accT+pd});
+          accT+=pd;
+        }
+      });
+    }else{
+      /* 数量不一致：按字符比例分配（累积法，保证字符不丢失） */
+      var speechStart=segs[0].start;
+      var speechTotal=Math.max(0.01,segs[segs.length-1].end-speechStart);
+      var charAcc=0;
+      segs.forEach(function(seg){
+        var cStart=charAcc;
+        var cEnd=Math.round(totalChars*(seg.end-speechStart)/speechTotal);
+        if(cEnd<cStart)cEnd=cStart;
+        if(cEnd>totalChars)cEnd=totalChars;
+        charAcc=cEnd;
+        var segText=fullText.substring(cStart,cEnd);
+        var pieces=chunkSmart(segText,10);
+        var segChars=segText.length||1;
+        var accT=seg.start;
+        for(var pi=0;pi<pieces.length;pi++){
+          var pd=(seg.end-seg.start)*pieces[pi].length/segChars;
+          tl.push({text:pieces[pi],start:accT,end:accT+pd});
+          accT+=pd;
+        }
+      });
+    }
+  }else{
+    /* 无VAD：按字数比例均分（原逻辑）+ 10字切分保证单行 */
     var accTime=0;
     for(var si=0;si<subtitleLines.length;si++){
-      var ratio=subtitleLines[si].length/totalChars;
-      var segDur=subTotal*ratio;
-      tl.push({text:subtitleLines[si],start:accTime,end:accTime+segDur});accTime+=segDur;
+      var line=subtitleLines[si];
+      var segDur=duration*line.length/totalChars;
+      var pieces=chunkSmart(line,10);
+      var accT=accTime;
+      for(var pi2=0;pi2<pieces.length;pi2++){
+        var pd2=segDur*pieces[pi2].length/(line.length||1);
+        tl.push({text:pieces[pi2],start:accT,end:accT+pd2});
+        accT+=pd2;
+      }
+      accTime+=segDur;
     }
   }
   return tl;
@@ -2575,6 +2662,7 @@ function loop(){
     stopBgmPreview();
     var old=LAST_SHOT;if(old){if(old.url)URL.revokeObjectURL(old.url);if(old.finalUrl&&old.finalUrl!==old.url)URL.revokeObjectURL(old.finalUrl);}
     LAST_SHOT=null;window._shootSegments=[];window._shootScriptInfo={};
+    window._speechSegments=null;
     EDIT_PLAN={inserts:[],bgm:null};
     switchView('cam');
   });
@@ -2582,6 +2670,7 @@ function loop(){
     stopBgmPreview();
     var old=LAST_SHOT;if(old){if(old.url)URL.revokeObjectURL(old.url);if(old.finalUrl&&old.finalUrl!==old.url)URL.revokeObjectURL(old.finalUrl);}
     LAST_SHOT=null;window._shootSegments=[];window._shootScriptInfo={};
+    window._speechSegments=null;
     EDIT_PLAN={inserts:[],bgm:null};
     switchView('home');
   });
