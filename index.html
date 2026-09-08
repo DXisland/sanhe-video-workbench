@@ -669,6 +669,17 @@ function switchView(name,push){
   if(name==='cam'){
     document.body.classList.add('in-cam');
     S.camActive=true;
+    /* 返回拍摄界面时若摄像头已释放，自动重启 */
+    if(!S.stream){
+      startCamera().then(function(){
+        S.ready=true;
+        initAudio();
+        applyFlip();
+      }).catch(function(err){
+        $('errCard').style.display='block';
+        $('errCard').textContent='无法打开摄像头：'+(err&&err.message||err);
+      });
+    }
   }else if(S.camActive){
     S.camActive=false;
     document.body.classList.remove('in-cam');
@@ -1779,29 +1790,61 @@ function recognizeSubtitle(cb){
   var src=(LAST_SHOT&&LAST_SHOT.url)||'';
   if(!blob&&!src){toast('没有可识别的视频','warn');cb&&cb([]);return;}
   window._speechSegments=null;
-  if(blob){
-    analyzeSpeechSegments(blob);
-    if(blob.size/1048576<=45){callSenseVoice(blob,'video.mp4',cb);return;}
-    extractAndRecognize(blob,cb);return;
-  }
-  fetch(src).then(function(r){return r.blob()}).then(function(b){
-    analyzeSpeechSegments(b);
-    if(b.size/1048576<=45){callSenseVoice(b,'video.mp4',cb);}
-    else{extractAndRecognize(b,cb);}
-  }).catch(function(){toast('视频读取失败，请重试','warn');cb&&cb([])});
+  var vadDone=false,vadSeen=null,textDone=false,textVal=null,sent=false;
+  var maybeFinish=function(){
+    if(sent)return;
+    if(!vadDone||!textDone)return;
+    sent=true;
+    if(!textVal){cb&&cb([]);return;}
+    var lines;
+    if(vadSeen&&vadSeen.length>0){
+      lines=splitTextToNSegments(textVal,vadSeen.length);
+    }else{
+      lines=splitTextDefault(textVal);
+    }
+    if(!lines||!lines.length)lines=[textVal];
+    cb&&cb(lines);
+  };
+  var onVad=function(segs){
+    vadSeen=(segs&&segs.length)?segs:null;
+    window._speechSegments=vadSeen;
+    vadDone=true;
+    maybeFinish();
+  };
+  var onText=function(text){
+    textVal=text||'';
+    textDone=true;
+    maybeFinish();
+  };
+  /* VAD 兜底：8秒没结果就放弃对齐（走纯标点拆分），不阻塞识别 */
+  setTimeout(function(){if(!vadDone){vadDone=true;maybeFinish();}},8000);
+  var run=function(b){
+    analyzeSpeechSegments(b,onVad);
+    if(b.size/1048576<=45){callSenseVoice(b,'video.mp4',onText);}
+    else{extractAndRecognize(b,onText);}
+  };
+  if(blob){run(blob);return;}
+  fetch(src).then(function(r){return r.blob()}).then(run).catch(function(){toast('视频读取失败，请重试','warn');cb&&cb([])});
 }
 /* VAD：解码视频音轨，检测说话分段（供字幕时间轴对齐用） */
-function analyzeSpeechSegments(blob){
-  try{
-    var actx=new (window.AudioContext||window.webkitAudioContext)();
-    blob.arrayBuffer().then(function(buf){
-      actx.decodeAudioData(buf.slice(0),function(audioBuffer){
-        var segs=vadSegments(audioBuffer);
-        if(segs&&segs.length)window._speechSegments=segs;
-        actx.close();
-      },function(){actx.close();});
-    }).catch(function(){actx.close();});
-  }catch(e){}
+function analyzeSpeechSegments(blob,cb){
+  var actx=null,closed=false,called=false;
+  var finish=function(segs){
+    if(called)return;called=true;
+    if(actx&&!closed){closed=true;try{actx.close()}catch(e){}}
+    cb&&cb(segs);
+  };
+  try{actx=new (window.AudioContext||window.webkitAudioContext)();}
+  catch(e){finish(null);return;}
+  /* 解码兜底：20秒没出结果就释放 AudioContext */
+  setTimeout(function(){finish(null);},20000);
+  blob.arrayBuffer().then(function(buf){
+    if(closed)return;
+    actx.decodeAudioData(buf.slice(0),function(audioBuffer){
+      var segs=vadSegments(audioBuffer);
+      finish(segs&&segs.length?segs:null);
+    },function(){finish(null);});
+  }).catch(function(){finish(null);});
 }
 function extractAndRecognize(videoBlob,cb){
   var url=URL.createObjectURL(videoBlob);
@@ -1827,7 +1870,7 @@ function extractAndRecognize(videoBlob,cb){
       rec.ondataavailable=function(e){if(e.data&&e.data.size>0)chunks.push(e.data)};
       rec.onstop=function(){
         cleanup();
-        if(!chunks.length){toast('音频提取失败','warn');cb&&cb([]);return;}
+        if(!chunks.length){toast('音频提取失败','warn');cb&&cb('');return;}
         var ab=new Blob(chunks,{type:mime||'audio/webm'});
         callSenseVoice(ab,'audio.webm',cb);
       };
@@ -1837,10 +1880,10 @@ function extractAndRecognize(videoBlob,cb){
       setTimeout(function(){try{if(rec&&rec.state==='recording')rec.stop()}catch(e){}},(dur+8)*1000);
       v.onended=function(){try{if(rec&&rec.state==='recording')rec.stop()}catch(e){}};
     }catch(e){
-      toast('音频提取失败，请重试','warn');cleanup();cb&&cb([]);
+      toast('音频提取失败，请重试','warn');cleanup();cb&&cb('');
     }
   };
-  v.onerror=function(){toast('视频加载失败','warn');cleanup();cb&&cb([])};
+  v.onerror=function(){toast('视频加载失败','warn');cleanup();cb&&cb('')};
 }
 function callSenseVoice(fileBlob,filename,cb){
   var fd=new FormData();
@@ -1855,32 +1898,66 @@ function callSenseVoice(fileBlob,filename,cb){
     return r.json();
   }).then(function(data){
     var text=(data&&data.text)||'';
-    if(!text){toast('未识别到语音内容','warn');cb&&cb([]);return;}
+    if(!text){toast('未识别到语音内容','warn');cb&&cb('');return;}
     try{text=text.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}]/gu,'').trim()}catch(e){}
-    /* 按所有常见标点拆分（含逗号），确保整段话被拆成多条字幕 */
-    var raw=text.split(/[。！？!?；;，,、\n]/).map(function(s){return s.trim()}).filter(function(s){return s.length>0});
-    var lines=[];
-    raw.forEach(function(s){
-      /* 过长片段按12字再切分，保证字幕不长 */
-      while(s.length>12){
-        lines.push(s.substring(0,12));
-        s=s.substring(12);
-      }
-      if(s.length>0){
-        /* 过短片段并入上一条，避免单字字幕 */
-        if(lines.length>0&&lines[lines.length-1].length<5){
-          lines[lines.length-1]+=s;
-        }else{
-          lines.push(s);
-        }
-      }
-    });
-    if(!lines.length)lines=[text];
-    cb&&cb(lines);
+    cb&&cb(text);
   }).catch(function(err){
     toast('语音识别失败：'+(err&&err.message||err),'warn');
-    cb&&cb([]);
+    cb&&cb('');
   });
+}
+/* 无VAD时的默认拆分：按所有常见标点拆成多段 */
+function splitTextDefault(text){
+  if(!text)return[];
+  var parts=text.split(/[。！？!?；;，,、\n]/).map(function(s){return s.trim()}).filter(function(s){return s.length>0});
+  return parts.length?parts:[text];
+}
+/* 把识别文本拆成恰好N段（对齐语音分段数），不拆词、优先标点断句 */
+function splitTextToNSegments(text,N){
+  if(!text||N<=0)return [text||''];
+  var tailChars='的了是在有和与或也不人都会到说要可她他这那被把让给能过下上来机表店元块折优惠';
+  var headChars='的了是在有和与或也不人都会到说要可她他这那被把让给能过下上来今明这那每各一三四五六七八九十百千万亿小天才手';
+  var clean=text;
+  var out=clean.split(/[。！？!?；;\n]/).map(function(s){return s.trim()}).filter(function(s){return s.length>0});
+  if(out.length<N){
+    var expanded=[];
+    out.forEach(function(s){
+      expanded=expanded.concat(s.split(/[，,、]/).map(function(x){return x.trim()}).filter(function(x){return x.length>0}));
+    });
+    out=expanded;
+  }
+  if(out.length===N)return out;
+  if(out.length>N){
+    while(out.length>N){
+      var bi=-1,minLen=1e9;
+      for(var i=0;i<out.length-1;i++){
+        var L=out[i].length+out[i+1].length;
+        if(L<minLen){minLen=L;bi=i;}
+      }
+      if(bi<0)break;
+      out[bi]=out[bi]+out[bi+1];
+      out.splice(bi+1,1);
+    }
+    return out;
+  }
+  while(out.length<N){
+    var mi=-1,maxLen=0;
+    for(var j=0;j<out.length;j++){
+      if(out[j].length>maxLen){maxLen=out[j].length;mi=j;}
+    }
+    if(mi<0||maxLen<4)break;
+    var s=out[mi];
+    var half=Math.ceil(s.length/2);
+    var cut=half;
+    for(var c=half;c>=half-4&&c>0;c--){
+      var ch=s.charAt(c-1);
+      var nx=s.charAt(c)||'';
+      if(/[，。！？!?；;、]/.test(ch)){cut=c;break;}
+      if(tailChars.indexOf(ch)>=0||(nx&&headChars.indexOf(nx)>=0)){cut=c;break;}
+    }
+    out.splice(mi,1,s.substring(0,cut),s.substring(cut));
+  }
+  return out;
 }
 function stopBgmPreview(){
   if(bgmAudio){try{bgmAudio.pause()}catch(e){}bgmAudio=null;bgmPlayingId=null}
@@ -2380,14 +2457,19 @@ function buildSubTimeline(duration){
       /* 兜底：主视频彻底卡死才强制结束（正常情况下主视频播完触发 finishNow） */
       forceStopTimer=setTimeout(finishNow,(total+20)*1000);
 
+      var playStarted=false;
       var playFunc=function(){
+        if(playStarted)return;
+        playStarted=true;
         mainVideo.play().catch(function(){});
         if(bgmEl&&!bgmEl._dead){bgmEl.play().catch(function(){})}
         reportProgress(0);
         requestAnimationFrame(drawFrame);
       };
       if(audioCtx&&audioCtx.state==='suspended'){
-        audioCtx.resume().then(playFunc).catch(playFunc);
+        /* 1.5秒兜底：resume 挂起也强制开始，绝不让合成卡在0% */
+        var resumeFallback=setTimeout(function(){playFunc();},1500);
+        audioCtx.resume().then(function(){clearTimeout(resumeFallback);playFunc();}).catch(function(){clearTimeout(resumeFallback);playFunc();});
       }else{playFunc();}
     }
 
