@@ -2144,7 +2144,7 @@ function buildSubTimeline(duration){
         });
       }catch(e){audioCtx=null;audioDest=null;}
 
-      var mimeType=['video/mp4','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'].find(function(t){
+      var mimeType=['video/webm;codecs=vp8,opus','video/webm;codecs=vp9,opus','video/webm','video/mp4'].find(function(t){
         try{return MediaRecorder.isTypeSupported(t)}catch(e){return false}
       })||'';
       var recorder;
