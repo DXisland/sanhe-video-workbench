@@ -1321,6 +1321,8 @@ function stopRecord(){
   S.recording=false;
   S.recDur=(Date.now()-S.recStart)/1000;
   clearInterval(S.recTimer);S.recTimer=null;
+  /* 先 requestData 强制 flush 缓冲的最后一秒数据，再 stop，避免末尾内容丢失 */
+  try{S.recorder.requestData()}catch(e){}
   try{S.recorder.stop()}catch(e){}
 }
 function onRecordStop(){
@@ -2246,61 +2248,32 @@ function composeFinalClip(clip, segments, scriptInfo, plan, onProgress){
 function buildSubTimeline(duration){
   var tl=[];
   if(subtitleLines.length===0)return tl;
-  var fullText=subtitleLines.join('');
-  var totalChars=fullText.length||1;
+  var totalChars=subtitleLines.reduce(function(s,l){return s+l.length;},0);
+  if(totalChars<=0)totalChars=subtitleLines.length;
   var segs=window._speechSegments;
+  /* 字幕均匀分布（按字数比例），彻底避免时快时慢 */
+  var startTime=0,endTime=duration;
   if(segs&&segs.length>0){
-    var one2one=(subtitleLines.length===segs.length);
-    if(one2one){
-      /* 句子数与语音段数一致：一一对应，完美对齐 */
-      subtitleLines.forEach(function(line,li){
-        var seg=segs[li];
-        var pieces=chunkSmart(line,10);
-        var segChars=line.length||1;
-        var accT=seg.start;
-        for(var pi=0;pi<pieces.length;pi++){
-          var pd=(seg.end-seg.start)*pieces[pi].length/segChars;
-          tl.push({text:pieces[pi],start:accT,end:accT+pd});
-          accT+=pd;
-        }
-      });
-    }else{
-      /* 数量不一致：按字符比例分配（累积法，保证字符不丢失） */
-      var speechStart=segs[0].start;
-      var speechTotal=Math.max(0.01,segs[segs.length-1].end-speechStart);
-      var charAcc=0;
-      segs.forEach(function(seg){
-        var cStart=charAcc;
-        var cEnd=Math.round(totalChars*(seg.end-speechStart)/speechTotal);
-        if(cEnd<cStart)cEnd=cStart;
-        if(cEnd>totalChars)cEnd=totalChars;
-        charAcc=cEnd;
-        var segText=fullText.substring(cStart,cEnd);
-        var pieces=chunkSmart(segText,10);
-        var segChars=segText.length||1;
-        var accT=seg.start;
-        for(var pi=0;pi<pieces.length;pi++){
-          var pd=(seg.end-seg.start)*pieces[pi].length/segChars;
-          tl.push({text:pieces[pi],start:accT,end:accT+pd});
-          accT+=pd;
-        }
-      });
+    /* VAD 只用于校正首尾：从第一段语音开始，到最后一段语音结束 */
+    startTime=Math.max(0,Math.min(segs[0].start,1.0));
+    endTime=segs[segs.length-1].end;
+    /* 保护：VAD 检测异常（尾太早/首尾错乱）则回退到整段视频 */
+    if(endTime<duration*0.6||endTime<=startTime)endTime=duration;
+    if(startTime>=endTime-0.5)startTime=0;
+  }
+  var subTotal=Math.max(0.5,endTime-startTime);
+  var accTime=startTime;
+  for(var si=0;si<subtitleLines.length;si++){
+    var line=subtitleLines[si];
+    var segDur=subTotal*line.length/totalChars;
+    var pieces=chunkSmart(line,10);
+    var accT=accTime;
+    for(var pi=0;pi<pieces.length;pi++){
+      var pd=segDur*pieces[pi].length/(line.length||1);
+      tl.push({text:pieces[pi],start:accT,end:accT+pd});
+      accT+=pd;
     }
-  }else{
-    /* 无VAD：按字数比例均分（原逻辑）+ 10字切分保证单行 */
-    var accTime=0;
-    for(var si=0;si<subtitleLines.length;si++){
-      var line=subtitleLines[si];
-      var segDur=duration*line.length/totalChars;
-      var pieces=chunkSmart(line,10);
-      var accT=accTime;
-      for(var pi2=0;pi2<pieces.length;pi2++){
-        var pd2=segDur*pieces[pi2].length/(line.length||1);
-        tl.push({text:pieces[pi2],start:accT,end:accT+pd2});
-        accT+=pd2;
-      }
-      accTime+=segDur;
-    }
+    accTime+=segDur;
   }
   return tl;
 }
