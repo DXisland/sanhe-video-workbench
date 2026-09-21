@@ -1378,12 +1378,13 @@ function showSheet(kind,blob){
   $('sheetClose').onclick=closeSheet;
 }
 function closeSheet(){$('sheet').classList.remove('open')}
-function saveBlob(blob,name){
+function saveBlob(blob,name,title){
+  title=title||'拍摄素材';
   var f=new File([blob],name,{type:blob.type||'video/mp4'});
   if(navigator.canShare&&navigator.share){
     try{
       if(navigator.canShare({files:[f]})){
-        navigator.share({files:[f],title:'拍摄素材',text:name}).then(function(){}).catch(function(e){if(!e||e.name!=='AbortError')fallbackSave(blob,name)});
+        navigator.share({files:[f],title:title,text:name}).then(function(){}).catch(function(e){if(!e||e.name!=='AbortError')fallbackSave(blob,name)});
         return;
       }
     }catch(e){}
@@ -2312,7 +2313,7 @@ function buildSubTimeline(duration){
         audioCtx=new (window.AudioContext||window.webkitAudioContext)();
         audioDest=audioCtx.createMediaStreamDestination();
         var mainSrc=audioCtx.createMediaElementSource(mainVideo);
-        var mainOut=audioCtx.createGain();mainOut.gain.value=1;
+        var mainOut=audioCtx.createGain();mainOut.gain.value=1.8;
         mainSrc.connect(mainOut);
         mainOut.connect(audioDest);
         mainOut.connect(audioCtx.destination);
@@ -2349,7 +2350,9 @@ function buildSubTimeline(duration){
         try{mainVideo.pause()}catch(e){}
         if(audioCtx&&audioCtx.state!=='closed'){try{audioCtx.close()}catch(e){}}
         var blob=new Blob(chunks,{type:(chunks[0]&&chunks[0].type)||mimeType||'video/webm'});
-        var url=URL.createObjectURL(blob);resolve(url);
+        var url=URL.createObjectURL(blob);
+        if(LAST_SHOT)LAST_SHOT.finalBlob=blob;
+        resolve(url);
       };
 
       /* 文字图层预渲染缓存：标题/字幕各渲染一次，之后每帧直接贴图 */
@@ -2720,10 +2723,24 @@ function loop(){
     var clip=LAST_SHOT;if(!clip)return;
     if(editState==='ready'){startSynthesis();return}
     if(editState==='composing'){toast('正在合成中，请稍候','warn');return}
+    var name='成片_'+new Date().toLocaleString('zh-CN',{hour12:false}).replace(/[/:\s]/g,'-');
+    /* 优先用成片 blob 走系统分享/存储（iOS 可靠），没有则回退下载 */
+    if(clip.finalBlob){
+      var ext=(clip.finalBlob.type||'').indexOf('mp4')>=0?'mp4':'webm';
+      saveBlob(clip.finalBlob,name+'.'+ext,'成片保存');
+      toast('正在打开保存面板','good');
+      return;
+    }
+    if(clip.blob){
+      var ext3=(clip.blob.type||'').indexOf('webm')>=0?'webm':'mp4';
+      saveBlob(clip.blob,name+'.'+ext3,'视频保存');
+      toast('正在打开保存面板','good');
+      return;
+    }
     var url=clip.finalUrl||clip.url;
-    var ext=(url.indexOf('.mp4')>=0)?'.mp4':'.webm';
+    var ext2=(url.indexOf('.mp4')>=0)?'.mp4':'.webm';
     var a=document.createElement('a');a.href=url;
-    a.download='成片_'+new Date().toLocaleString('zh-CN',{hour12:false}).replace(/[/:\s]/g,'-')+ext;
+    a.download=name+ext2;
     a.click();toast('已开始保存成片','good');
   });
   $('editRetakeBtn').addEventListener('click',function(){
