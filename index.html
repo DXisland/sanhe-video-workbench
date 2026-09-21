@@ -530,6 +530,18 @@ body.no-nav .bottomnav{display:none}
         <button class="abtn ghost" id="editRestartBtn" style="flex:1;min-width:140px">重新配置</button>
       </div>
     </div>
+    <div id="savePanel" class="hide" style="position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:9990;display:flex;align-items:center;justify-content:center;padding:20px">
+      <div style="background:#fff;border-radius:14px;padding:20px;width:92%;max-width:420px;text-align:center">
+        <div style="font-size:16px;font-weight:800;color:#333;margin-bottom:10px">保存成片</div>
+        <video id="savePanelVideo" controls playsinline style="width:100%;border-radius:10px;background:#000;max-height:46vh"></video>
+        <p style="font-size:13px;color:#666;margin:10px 0 4px">长按上方视频，选择「存储视频」即可保存到相册</p>
+        <p id="savePanelHint" class="hide" style="font-size:12px;color:#999;margin:0 0 8px">也可以点下方按钮尝试直接下载</p>
+        <div style="display:flex;gap:10px;margin-top:8px">
+          <button id="savePanelDownload" class="abtn primary" style="flex:1">下载文件</button>
+          <button id="savePanelClose" class="abtn ghost" style="flex:1">关闭</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -2210,6 +2222,24 @@ function composeFinalClip(clip, segments, scriptInfo, plan, onProgress){
     mainVideo.playsInline=true;mainVideo.preload='auto';
     mainVideo.setAttribute('playsinline','');
 
+    /* 预解码主视频音轨：合成时用 AudioBufferSourceNode 稳定播放人声，
+       避免 iOS 上媒体元素音频被系统波动（渐弱消失再渐强） */
+    var decodedAudio=null;
+    var audioDecodeDone=!clip.blob;
+    if(clip.blob){
+      decodeVideoAudio(clip.blob,function(ab){
+        decodedAudio=ab;
+        if(!audioDecodeDone){
+          audioDecodeDone=true;
+          if(typeof maybeStart==='function')maybeStart();
+        }
+      });
+      /* 解码兜底：10秒没完成就放弃，回退媒体元素音频 */
+      setTimeout(function(){
+        if(!audioDecodeDone){audioDecodeDone=true;decodedAudio=null;if(typeof maybeStart==='function')maybeStart();}
+      },10000);
+    }
+
     /* 穿插素材：muted（只出画面，绝不发声、绝不抢音频焦点） */
     var insertDefs=(plan.inserts||[]).map(function(id){
       return MATERIAL_LIB.items.video.find(function(v){return v.id===id});
@@ -2308,13 +2338,21 @@ function buildSubTimeline(duration){
       var stream=canvas.captureStream(30);
 
       /* 音频：主视频人声 + BGM 同时进录制流和扬声器 */
-      var audioCtx=null,audioDest=null;
+      var audioCtx=null,audioDest=null,audioSrcNode=null;
       try{
         audioCtx=new (window.AudioContext||window.webkitAudioContext)();
         audioDest=audioCtx.createMediaStreamDestination();
-        var mainSrc=audioCtx.createMediaElementSource(mainVideo);
         var mainOut=audioCtx.createGain();mainOut.gain.value=1.8;
-        mainSrc.connect(mainOut);
+        if(decodedAudio){
+          /* 用解码后的 AudioBuffer 稳定播放人声：音量恒定，不受 iOS 媒体元素音频波动影响 */
+          audioSrcNode=audioCtx.createBufferSource();
+          audioSrcNode.buffer=decodedAudio;
+          audioSrcNode.connect(mainOut);
+          mainVideo.muted=true;
+        }else{
+          var mainSrc=audioCtx.createMediaElementSource(mainVideo);
+          mainSrc.connect(mainOut);
+        }
         mainOut.connect(audioDest);
         mainOut.connect(audioCtx.destination);
         if(bgmEl&&!bgmEl._dead){
@@ -2330,7 +2368,7 @@ function buildSubTimeline(duration){
         audioCtx.addEventListener('statechange',function(){
           if(!finished&&audioCtx&&audioCtx.state==='suspended'){audioCtx.resume().catch(function(){})}
         });
-      }catch(e){audioCtx=null;audioDest=null;}
+      }catch(e){audioCtx=null;audioDest=null;audioSrcNode=null;}
 
       var mimeType=['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/webm;codecs=vp8,opus','video/webm;codecs=vp9,opus','video/webm'].find(function(t){
         try{return MediaRecorder.isTypeSupported(t)}catch(e){return false}
@@ -2346,6 +2384,7 @@ function buildSubTimeline(duration){
         if(progressTimer)clearInterval(progressTimer);
         if(forceStopTimer)clearTimeout(forceStopTimer);
         if(matCheckTimer)clearInterval(matCheckTimer);
+        if(audioSrcNode){try{audioSrcNode.stop()}catch(e){}}
         if(bgmEl&&!bgmEl._dead){try{bgmEl.pause();bgmEl._dead=true}catch(e){}}
         try{mainVideo.pause()}catch(e){}
         if(audioCtx&&audioCtx.state!=='closed'){try{audioCtx.close()}catch(e){}}
@@ -2451,6 +2490,7 @@ function buildSubTimeline(duration){
         if(playStarted)return;
         playStarted=true;
         mainVideo.play().catch(function(){});
+        if(audioSrcNode){try{audioSrcNode.start(0)}catch(e){}}
         if(bgmEl&&!bgmEl._dead){bgmEl.play().catch(function(){})}
         reportProgress(0);
         requestAnimationFrame(drawFrame);
@@ -2462,8 +2502,8 @@ function buildSubTimeline(duration){
       }else{playFunc();}
     }
 
-    /* 加载协调：主视频 + 素材 + BGM 全部就绪（或失败）后开始 */
-    var pending=1+insertEls.length+(bgmEl?1:0);
+    /* 加载协调：主视频 + 素材 + BGM + 音轨解码 全部就绪（或失败）后开始 */
+    var pending=1+insertEls.length+(bgmEl?1:0)+(audioDecodeDone?0:1);
     var loadStarted=false;
     function maybeStart(){
       pending--;
@@ -2724,17 +2764,22 @@ function loop(){
     if(editState==='ready'){startSynthesis();return}
     if(editState==='composing'){toast('正在合成中，请稍候','warn');return}
     var name='成片_'+new Date().toLocaleString('zh-CN',{hour12:false}).replace(/[/:\s]/g,'-');
-    /* 优先用成片 blob 走系统分享/存储（iOS 可靠），没有则回退下载 */
-    if(clip.finalBlob){
-      var ext=(clip.finalBlob.type||'').indexOf('mp4')>=0?'mp4':'webm';
-      saveBlob(clip.finalBlob,name+'.'+ext,'成片保存');
-      toast('正在打开保存面板','good');
-      return;
-    }
-    if(clip.blob){
-      var ext3=(clip.blob.type||'').indexOf('webm')>=0?'webm':'mp4';
-      saveBlob(clip.blob,name+'.'+ext3,'视频保存');
-      toast('正在打开保存面板','good');
+    var blob=clip.finalBlob||clip.blob;
+    if(blob){
+      var ext=(blob.type||'').indexOf('webm')>=0?'webm':'mp4';
+      var fileName=name+'.'+ext;
+      /* 先尝试系统分享（支持分享的环境直接保存到相册） */
+      var shareOk=false;
+      if(navigator.canShare&&navigator.share){
+        try{
+          var f=new File([blob],fileName,{type:blob.type||'video/mp4'});
+          if(navigator.canShare({files:[f]})){
+            shareOk=true;
+            navigator.share({files:[f],title:'成片保存',text:fileName}).then(function(){}).catch(function(e){if(!e||e.name!=='AbortError')openSavePanel(blob,fileName)});
+          }
+        }catch(e){}
+      }
+      if(!shareOk)openSavePanel(blob,fileName);
       return;
     }
     var url=clip.finalUrl||clip.url;
@@ -2743,6 +2788,27 @@ function loop(){
     a.download=name+ext2;
     a.click();toast('已开始保存成片','good');
   });
+  /* 保存面板：显示成片视频，引导长按存储 + 提供下载按钮 */
+  function openSavePanel(blob,fileName){
+    var url=URL.createObjectURL(blob);
+    var sv=$('savePanelVideo');
+    if(sv){sv.src=url;}
+    var panel=$('savePanel');
+    if(panel)panel.classList.remove('hide');
+    var dl=$('savePanelDownload');
+    if(dl){
+      dl.onclick=function(){
+        var a=document.createElement('a');
+        a.href=url;a.download=fileName;
+        document.body.appendChild(a);a.click();
+        setTimeout(function(){a.remove()},300);
+        var hint=$('savePanelHint');if(hint)hint.classList.remove('hide');
+        hint.textContent='已尝试下载，若未开始下载请长按上方视频选择「存储视频」';
+      };
+    }
+    var cl=$('savePanelClose');
+    if(cl){cl.onclick=function(){panel.classList.add('hide');if(sv)sv.pause();};}
+  }
   $('editRetakeBtn').addEventListener('click',function(){
     stopBgmPreview();
     var old=LAST_SHOT;if(old){if(old.url)URL.revokeObjectURL(old.url);if(old.finalUrl&&old.finalUrl!==old.url)URL.revokeObjectURL(old.finalUrl);}
