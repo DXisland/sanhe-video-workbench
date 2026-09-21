@@ -1793,100 +1793,98 @@ function recognizeSubtitle(cb){
   var src=(LAST_SHOT&&LAST_SHOT.url)||'';
   if(!blob&&!src){toast('没有可识别的视频','warn');cb&&cb([]);return;}
   window._speechSegments=null;
-  var vadDone=false,vadSeen=null,textDone=false,textVal=null,sent=false;
-  var maybeFinish=function(){
-    if(sent)return;
-    if(!vadDone||!textDone)return;
-    sent=true;
-    if(!textVal){cb&&cb([]);return;}
-    var lines;
-    if(vadSeen&&vadSeen.length>0){
-      lines=splitTextToNSegments(textVal,vadSeen.length);
-    }else{
-      lines=splitTextDefault(textVal);
-    }
-    if(!lines||!lines.length)lines=[textVal];
+  var sent=false;
+  var finish=function(lines){
+    if(sent)return;sent=true;
     cb&&cb(lines);
   };
-  var onVad=function(segs){
-    vadSeen=(segs&&segs.length)?segs:null;
-    window._speechSegments=vadSeen;
-    vadDone=true;
-    maybeFinish();
+  var doRecognize=function(b){
+    /* 优先解码出音频（快、体积小），VAD + 转WAV上传；失败才回退上传整段视频 */
+    decodeVideoAudio(b,function(audioBuffer){
+      if(audioBuffer){
+        var segs=vadSegments(audioBuffer);
+        window._speechSegments=(segs&&segs.length)?segs:null;
+        var wav=null;
+        try{wav=audioBufferToWav(audioBuffer)}catch(e){}
+        if(wav&&wav.size>0){
+          callSenseVoice(wav,'audio.wav',function(text){
+            if(!text){finish([]);return;}
+            var lines;
+            if(window._speechSegments&&window._speechSegments.length>0){
+              lines=splitTextToNSegments(text,window._speechSegments.length);
+            }else{
+              lines=splitTextDefault(text);
+            }
+            finish((lines&&lines.length)?lines:[text]);
+          });
+        }else{
+          callSenseVoice(b,'video.mp4',function(text){
+            if(!text){finish([]);return;}
+            var lines=splitTextDefault(text);
+            finish((lines&&lines.length)?lines:[text]);
+          });
+        }
+      }else{
+        callSenseVoice(b,'video.mp4',function(text){
+          if(!text){finish([]);return;}
+          var lines=splitTextDefault(text);
+          finish((lines&&lines.length)?lines:[text]);
+        });
+      }
+    });
   };
-  var onText=function(text){
-    textVal=text||'';
-    textDone=true;
-    maybeFinish();
-  };
-  /* VAD 兜底：8秒没结果就放弃对齐（走纯标点拆分），不阻塞识别 */
-  setTimeout(function(){if(!vadDone){vadDone=true;maybeFinish();}},8000);
-  var run=function(b){
-    analyzeSpeechSegments(b,onVad);
-    if(b.size/1048576<=45){callSenseVoice(b,'video.mp4',onText);}
-    else{extractAndRecognize(b,onText);}
-  };
-  if(blob){run(blob);return;}
-  fetch(src).then(function(r){return r.blob()}).then(run).catch(function(){toast('视频读取失败，请重试','warn');cb&&cb([])});
+  if(blob){doRecognize(blob);return;}
+  fetch(src).then(function(r){return r.blob()}).then(doRecognize).catch(function(){toast('视频读取失败，请重试','warn');finish([])});
 }
-/* VAD：解码视频音轨，检测说话分段（供字幕时间轴对齐用） */
-function analyzeSpeechSegments(blob,cb){
-  var actx=null,closed=false,called=false;
-  var finish=function(segs){
-    if(called)return;called=true;
-    if(actx&&!closed){closed=true;try{actx.close()}catch(e){}}
-    cb&&cb(segs);
+/* 解码视频音轨为 AudioBuffer（C++级解码，快） */
+function decodeVideoAudio(blob,cb){
+  var actx=null,done=false;
+  var finish=function(buf){
+    if(done)return;done=true;
+    if(actx){try{actx.close()}catch(e){}}
+    cb&&cb(buf);
   };
   try{actx=new (window.AudioContext||window.webkitAudioContext)();}
   catch(e){finish(null);return;}
-  /* 解码兜底：20秒没出结果就释放 AudioContext */
   setTimeout(function(){finish(null);},20000);
   blob.arrayBuffer().then(function(buf){
-    if(closed)return;
     actx.decodeAudioData(buf.slice(0),function(audioBuffer){
-      var segs=vadSegments(audioBuffer);
-      finish(segs&&segs.length?segs:null);
+      finish(audioBuffer);
     },function(){finish(null);});
   }).catch(function(){finish(null);});
 }
-function extractAndRecognize(videoBlob,cb){
-  var url=URL.createObjectURL(videoBlob);
-  var v=document.createElement('video');
-  v.src=url;v.playsInline=true;v.muted=true;v.preload='auto';
-  v.setAttribute('playsinline','');
-  var rec=null,chunks=[],actx=null;
-  var cleaned=false;
-  function cleanup(){
-    if(cleaned)return;cleaned=true;
-    try{v.pause()}catch(e){}
-    if(actx){try{actx.close()}catch(e){}}
-    try{URL.revokeObjectURL(url)}catch(e){}
+/* AudioBuffer 转单声道 16kHz 16bit WAV（体积小，上传快） */
+function audioBufferToWav(buffer){
+  var targetRate=16000;
+  var srcData=buffer.getChannelData(0);
+  var srcRate=buffer.sampleRate;
+  var srcLen=buffer.length;
+  var outData=srcData,outRate=srcRate,outLen=srcLen;
+  if(srcRate>targetRate){
+    var ratio=srcRate/targetRate;
+    outLen=Math.floor(srcLen/ratio);
+    outData=new Float32Array(outLen);
+    for(var i=0;i<outLen;i++)outData[i]=srcData[Math.floor(i*ratio)];
+    outRate=targetRate;
   }
-  v.onloadedmetadata=function(){
-    try{
-      actx=new (window.AudioContext||window.webkitAudioContext)();
-      var dest=actx.createMediaStreamDestination();
-      var srcNode=actx.createMediaElementSource(v);
-      srcNode.connect(dest);
-      var mime=['audio/webm;codecs=opus','audio/mp4','audio/webm','audio/ogg'].find(function(t){try{return MediaRecorder.isTypeSupported(t)}catch(e){return false}})||'';
-      rec=new MediaRecorder(dest.stream,mime?{mimeType:mime}:undefined);
-      rec.ondataavailable=function(e){if(e.data&&e.data.size>0)chunks.push(e.data)};
-      rec.onstop=function(){
-        cleanup();
-        if(!chunks.length){toast('音频提取失败','warn');cb&&cb('');return;}
-        var ab=new Blob(chunks,{type:mime||'audio/webm'});
-        callSenseVoice(ab,'audio.webm',cb);
-      };
-      var startIt=function(){try{rec.start()}catch(e){}v.play().catch(function(){})};
-      if(actx.state==='suspended'){actx.resume().then(startIt).catch(startIt)}else{startIt()}
-      var dur=(v.duration&&isFinite(v.duration))?v.duration:60;
-      setTimeout(function(){try{if(rec&&rec.state==='recording')rec.stop()}catch(e){}},(dur+8)*1000);
-      v.onended=function(){try{if(rec&&rec.state==='recording')rec.stop()}catch(e){}};
-    }catch(e){
-      toast('音频提取失败，请重试','warn');cleanup();cb&&cb('');
-    }
-  };
-  v.onerror=function(){toast('视频加载失败','warn');cleanup();cb&&cb('')};
+  var bitsPerSample=16,bytesPerSample=2;
+  var blockAlign=bytesPerSample;
+  var dataLength=outLen*blockAlign;
+  var ab=new ArrayBuffer(44+dataLength);
+  var view=new DataView(ab);
+  function wstr(offset,str){for(var i=0;i<str.length;i++)view.setUint8(offset+i,str.charCodeAt(i));}
+  wstr(0,'RIFF');view.setUint32(4,36+dataLength,true);wstr(8,'WAVE');
+  wstr(12,'fmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);
+  view.setUint16(22,1,true);view.setUint32(24,outRate,true);view.setUint32(28,outRate*blockAlign,true);
+  view.setUint16(32,blockAlign,true);view.setUint16(34,bitsPerSample,true);
+  wstr(36,'data');view.setUint32(40,dataLength,true);
+  var offset=44;
+  for(var i=0;i<outLen;i++){
+    var s=Math.max(-1,Math.min(1,outData[i]));
+    view.setInt16(offset,s<0?s*0x8000:s*0x7FFF,true);
+    offset+=2;
+  }
+  return new Blob([ab],{type:'audio/wav'});
 }
 function callSenseVoice(fileBlob,filename,cb){
   var fd=new FormData();
@@ -1896,7 +1894,7 @@ function callSenseVoice(fileBlob,filename,cb){
   var ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
   var timer=setTimeout(function(){
     if(!done){done=true;try{ctrl&&ctrl.abort()}catch(e){};toast('语音识别超时，请重试','warn');cb&&cb('');}
-  },90000);
+  },60000);
   var finish=function(text){
     if(done)return;done=true;
     clearTimeout(timer);
