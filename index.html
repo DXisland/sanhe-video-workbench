@@ -533,7 +533,7 @@ body.no-nav .bottomnav{display:none}
     <div id="savePanel" class="hide" style="position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:9990;display:flex;align-items:center;justify-content:center;padding:20px">
       <div style="background:#fff;border-radius:14px;padding:20px;width:92%;max-width:420px;text-align:center">
         <div style="font-size:16px;font-weight:800;color:#333;margin-bottom:10px">保存成片</div>
-        <video id="savePanelVideo" controls playsinline style="width:100%;border-radius:10px;background:#000;max-height:46vh"></video>
+        <video id="savePanelVideo" controls playsinline webkit-playsinline style="width:100%;border-radius:10px;background:#000;max-height:46vh;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto;touch-action:manipulation"></video>
         <p style="font-size:13px;color:#666;margin:10px 0 4px">长按上方视频，选择「存储视频」即可保存到相册</p>
         <p id="savePanelHint" class="hide" style="font-size:12px;color:#999;margin:0 0 8px">也可以点下方按钮尝试直接下载</p>
         <div style="display:flex;gap:10px;margin-top:8px">
@@ -1311,7 +1311,7 @@ function doStartRecord(){
   S.recorder.ondataavailable=function(e){if(e.data&&e.data.size)S.chunks.push(e.data)};
   S.recorder.onerror=function(){try{stopRecord()}catch(_){} };
   S.recorder.onstop=onRecordStop;
-  S.recorder.start(1000);
+  S.recorder.start(500);
   S.recording=true;S.recStart=Date.now();
   S.recTimer=setInterval(function(){
     var s=Math.floor((Date.now()-S.recStart)/1000);
@@ -1333,9 +1333,14 @@ function stopRecord(){
   S.recording=false;
   S.recDur=(Date.now()-S.recStart)/1000;
   clearInterval(S.recTimer);S.recTimer=null;
-  /* 先 requestData 强制 flush 缓冲的最后一秒数据，再 stop，避免末尾内容丢失 */
+  /* 双重 requestData + 延迟 stop：确保末尾缓冲数据全部 flush 再停止，避免丢秒 */
   try{S.recorder.requestData()}catch(e){}
-  try{S.recorder.stop()}catch(e){}
+  setTimeout(function(){
+    try{S.recorder.requestData()}catch(e){}
+    setTimeout(function(){
+      try{S.recorder.stop()}catch(e){}
+    },200);
+  },200);
 }
 function onRecordStop(){
   setRecUI(false);
@@ -2798,12 +2803,39 @@ function loop(){
     var dl=$('savePanelDownload');
     if(dl){
       dl.onclick=function(){
-        var a=document.createElement('a');
-        a.href=url;a.download=fileName;
-        document.body.appendChild(a);a.click();
-        setTimeout(function(){a.remove()},300);
-        var hint=$('savePanelHint');if(hint)hint.classList.remove('hide');
-        hint.textContent='已尝试下载，若未开始下载请长按上方视频选择「存储视频」';
+        var hint=$('savePanelHint');
+        var tryShare=function(){
+          try{
+            var f=new File([blob],fileName,{type:blob.type||'video/mp4'});
+            if(navigator.canShare&&navigator.share&&navigator.canShare({files:[f]})){
+              navigator.share({files:[f],title:'保存成片',text:fileName}).then(function(){}).catch(function(e){if(e&&e.name!=='AbortError')tryOpen();});
+              return true;
+            }
+          }catch(e){}
+          return false;
+        };
+        var tryOpen=function(){
+          /* 在新窗口打开视频，用户可播放并长按保存 */
+          try{
+            var w=window.open(url,'_blank');
+            if(w)w.focus();
+            if(hint){hint.classList.remove('hide');hint.textContent='已在浏览器打开视频，可长按保存；或直接长按上方视频选「存储视频」';}
+          }catch(e){}
+        };
+        var tryDownload=function(){
+          var a=document.createElement('a');
+          a.href=url;a.download=fileName;
+          a.style.display='none';
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(function(){a.remove()},500);
+          if(hint){hint.classList.remove('hide');hint.textContent='已尝试下载，若未开始下载：长按上方视频选「存储视频」，或点击下方按钮在浏览器打开';}
+        };
+        /* 顺序：系统分享 → 直接下载 → 浏览器打开 */
+        if(!tryShare()){
+          tryDownload();
+          setTimeout(tryOpen,1200);
+        }
       };
     }
     var cl=$('savePanelClose');
