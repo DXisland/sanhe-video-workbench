@@ -645,7 +645,7 @@ var GUIDES={
 
 var S={
   stream:null,front:true,flipH:true,flipV:false,mode:'half',shoot:'video',
-  recording:false,recorder:null,chunks:[],recMime:'',recStart:0,recTimer:null,flipClean:null,
+  recording:false,recorder:null,chunks:[],recMime:'',recStart:0,recDur:0,recTimer:null,flipClean:null,
   guides:true,ready:false,camActive:false,wakeLock:null,actx:null,analyser:null,shake:false,
   zoom:1,brightBad:false
 };
@@ -1319,6 +1319,7 @@ function doStartRecord(){
 function stopRecord(){
   if(!S.recording)return;
   S.recording=false;
+  S.recDur=(Date.now()-S.recStart)/1000;
   clearInterval(S.recTimer);S.recTimer=null;
   try{S.recorder.stop()}catch(e){}
 }
@@ -1367,7 +1368,7 @@ function showSheet(kind,blob){
   $('saveBtn').onclick=function(){saveBlob(blob,name)};
   $('retakeBtn').onclick=closeSheet;
   $('toEditBtn').onclick=function(){
-    LAST_SHOT={kind:kind,blob:blob,url:url};
+    LAST_SHOT={kind:kind,blob:blob,url:url,duration:(kind==='video'?S.recDur:0)||0};
     closeSheet();
     switchView('edit');
     toast('素材已带入剪辑台','good');
@@ -2307,7 +2308,9 @@ function buildSubTimeline(duration){
     function startCompose(){
       var vw=mainVideo.videoWidth||640,vh=mainVideo.videoHeight||480;
       var D=mainVideo.duration;
-      if(!D||!isFinite(D)||D<=0)D=parseFloat(clip.duration)||10;
+      var recDur=parseFloat(clip.duration)||0;
+      if(!D||!isFinite(D)||D<=0)D=recDur||10;
+      else if(recDur>D+0.5)D=recDur;
 
       /* 可用素材：加载失败的剔除；只有一个素材时两个插入点复用同一个 */
       var usable=[];
@@ -2414,7 +2417,7 @@ function buildSubTimeline(duration){
         /* 进度完全由主视频播放进度驱动，不用墙钟，保证成片完整 */
         var mt=mainVideo.currentTime;
         if(!isFinite(mt)||mt<0)mt=(now-compStart)/1000;
-        if(mainVideo.ended||mt>=total-0.05){
+        if(mainVideo.ended||mt>=total+0.5){
           try{ctx.drawImage(mainVideo,0,0,cw,ch)}catch(e){}
           finishNow();
           return;
