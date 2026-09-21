@@ -1797,52 +1797,10 @@ function recognizeSubtitle(cb){
     sent=true;
     if(!textVal){cb&&cb([]);return;}
     var lines;
-    /* 关键：如果句子数等于语音段数，严格一一对应，时间完全对齐 */
-    if(subtitleLines.length===vadSeen.length){
-      /* 一一对应模式：每句话对应一个语音段 */
-      var speechStart=vadSeen[0].start;
-      var speechTotal=Math.max(0.01,vadSeen[vadSeen.length-1].end-vadSeen[0].start);
-      var charAcc=0;
-      subtitleLines.forEach(function(line,li){
-        var seg=vadSeen[li];
-        var cStart=charAcc;
-        var cEnd=Math.round(subtitleLines.reduce(function(s,l){return s+l.length;},0)*(seg.end-vadSeen[0].start)/Math.max(0.01,vadSeen[vadSeen.length-1].end-vadSeen[0].start));
-        if(cEnd<cStart)cEnd=cStart;
-        if(cEnd>subtitleLines.reduce(function(s,l){return s+l.length;},0))cEnd=subtitleLines.reduce(function(s,l){return s+l.length;},0);
-        charAcc=cEnd;
-        var segText=fullText.substring(cStart,cEnd);
-        var pieces=chunkSmart(segText,10);
-        var segChars=segText.length||1;
-        var accT=seg.start;
-        for(var pi=0;pi<pieces.length;pi++){
-          var pd=(seg.end-seg.start)*pieces[pi].length/segChars;
-          tl.push({text:pieces[pi],start:accT,end:accT+pd});
-          accT+=pd;
-        }
-      });
+    if(vadSeen&&vadSeen.length>0){
+      lines=splitTextToNSegments(textVal,vadSeen.length);
     }else{
-      /* 数量不一致：按字符比例分配（累积法，保证字符不丢失） */
-      var speechStart=vadSeen?vadSeen[0].start:0;
-      var speechTotal=Math.max(0.01,vadSeen?vadSeen[vadSeen.length-1].end-vadSeen[0].start:1);
-      var charAcc=0;
-      var fullText=subtitleLines.join('');
-      var totalChars=fullText.length||1;
-      segs.forEach(function(seg){
-        var cStart=charAcc;
-        var cEnd=Math.round(totalChars*(seg.end-speechStart)/speechTotal);
-        if(cEnd<cStart)cEnd=cStart;
-        if(cEnd>totalChars)cEnd=totalChars;
-        charAcc=cEnd;
-        var segText=fullText.substring(cStart,cEnd);
-        var pieces=chunkSmart(segText,10);
-        var segChars=segText.length||1;
-        var accT=seg.start;
-        for(var pi=0;pi<pieces.length;pi++){
-          var pd=(seg.end-seg.start)*pieces[pi].length/segChars;
-          tl.push({text:pieces[pi],start:accT,end:accT+pd});
-          accT+=pd;
-        }
-      });
+      lines=splitTextDefault(textVal);
     }
     if(!lines||!lines.length)lines=[textVal];
     cb&&cb(lines);
@@ -1931,21 +1889,33 @@ function callSenseVoice(fileBlob,filename,cb){
   var fd=new FormData();
   fd.append('file',fileBlob,filename||'audio.webm');
   fd.append('model','FunAudioLLM/SenseVoiceSmall');
+  var done=false;
+  var ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
+  var timer=setTimeout(function(){
+    if(!done){done=true;try{ctrl&&ctrl.abort()}catch(e){};toast('语音识别超时，请重试','warn');cb&&cb('');}
+  },90000);
+  var finish=function(text){
+    if(done)return;done=true;
+    clearTimeout(timer);
+    cb&&cb(text);
+  };
   fetch('https://api.siliconflow.cn/v1/audio/transcriptions',{
     method:'POST',
     headers:{'Authorization':'Bearer '+SILICONFLOW_KEY},
-    body:fd
+    body:fd,
+    signal:ctrl?ctrl.signal:undefined
   }).then(function(r){
     if(!r.ok)throw new Error('HTTP '+r.status);
     return r.json();
   }).then(function(data){
     var text=(data&&data.text)||'';
-    if(!text){toast('未识别到语音内容','warn');cb&&cb('');return;}
+    if(!text){toast('未识别到语音内容','warn');finish('');return;}
     try{text=text.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}]/gu,'').trim()}catch(e){}
-    cb&&cb(text);
+    finish(text);
   }).catch(function(err){
+    if(done)return;
     toast('语音识别失败：'+(err&&err.message||err),'warn');
-    cb&&cb('');
+    finish('');
   });
 }
 /* 无VAD时的默认拆分：按所有常见标点拆成多段 */
