@@ -1797,10 +1797,52 @@ function recognizeSubtitle(cb){
     sent=true;
     if(!textVal){cb&&cb([]);return;}
     var lines;
-    if(vadSeen&&vadSeen.length>0){
-      lines=splitTextToNSegments(textVal,vadSeen.length);
+    /* 关键：如果句子数等于语音段数，严格一一对应，时间完全对齐 */
+    if(subtitleLines.length===vadSeen.length){
+      /* 一一对应模式：每句话对应一个语音段 */
+      var speechStart=vadSeen[0].start;
+      var speechTotal=Math.max(0.01,vadSeen[vadSeen.length-1].end-vadSeen[0].start);
+      var charAcc=0;
+      subtitleLines.forEach(function(line,li){
+        var seg=vadSeen[li];
+        var cStart=charAcc;
+        var cEnd=Math.round(subtitleLines.reduce(function(s,l){return s+l.length;},0)*(seg.end-vadSeen[0].start)/Math.max(0.01,vadSeen[vadSeen.length-1].end-vadSeen[0].start));
+        if(cEnd<cStart)cEnd=cStart;
+        if(cEnd>subtitleLines.reduce(function(s,l){return s+l.length;},0))cEnd=subtitleLines.reduce(function(s,l){return s+l.length;},0);
+        charAcc=cEnd;
+        var segText=fullText.substring(cStart,cEnd);
+        var pieces=chunkSmart(segText,10);
+        var segChars=segText.length||1;
+        var accT=seg.start;
+        for(var pi=0;pi<pieces.length;pi++){
+          var pd=(seg.end-seg.start)*pieces[pi].length/segChars;
+          tl.push({text:pieces[pi],start:accT,end:accT+pd});
+          accT+=pd;
+        }
+      });
     }else{
-      lines=splitTextDefault(textVal);
+      /* 数量不一致：按字符比例分配（累积法，保证字符不丢失） */
+      var speechStart=vadSeen?vadSeen[0].start:0;
+      var speechTotal=Math.max(0.01,vadSeen?vadSeen[vadSeen.length-1].end-vadSeen[0].start:1);
+      var charAcc=0;
+      var fullText=subtitleLines.join('');
+      var totalChars=fullText.length||1;
+      segs.forEach(function(seg){
+        var cStart=charAcc;
+        var cEnd=Math.round(totalChars*(seg.end-speechStart)/speechTotal);
+        if(cEnd<cStart)cEnd=cStart;
+        if(cEnd>totalChars)cEnd=totalChars;
+        charAcc=cEnd;
+        var segText=fullText.substring(cStart,cEnd);
+        var pieces=chunkSmart(segText,10);
+        var segChars=segText.length||1;
+        var accT=seg.start;
+        for(var pi=0;pi<pieces.length;pi++){
+          var pd=(seg.end-seg.start)*pieces[pi].length/segChars;
+          tl.push({text:pieces[pi],start:accT,end:accT+pd});
+          accT+=pd;
+        }
+      });
     }
     if(!lines||!lines.length)lines=[textVal];
     cb&&cb(lines);
