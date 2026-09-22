@@ -551,13 +551,9 @@ body.no-nav .bottomnav{display:none}
       <div style="background:#fff;border-radius:14px;padding:20px;width:92%;max-width:420px;text-align:center">
         <div style="font-size:16px;font-weight:800;color:#333;margin-bottom:10px">保存成片</div>
         <video id="savePanelVideo" controls playsinline webkit-playsinline style="width:100%;border-radius:10px;background:#000;max-height:42vh;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto;touch-action:manipulation"></video>
-        <p style="font-size:13px;color:#666;margin:10px 0 6px;line-height:1.6">点击「保存到相册」直接存入手机相册<br>如无反应，可长按上方视频选「存储视频」</p>
-        <div style="display:flex;gap:10px;margin-top:4px">
-          <button id="savePanelSave" class="abtn primary" style="flex:1">保存到相册</button>
-          <button id="savePanelOpen" class="abtn ghost" style="flex:1">浏览器打开</button>
-        </div>
-        <div style="display:flex;gap:10px;margin-top:10px">
-          <button id="savePanelDownload" class="abtn ghost" style="flex:1">下载文件</button>
+        <p id="savePanelHint" style="font-size:13px;color:#666;margin:10px 0 6px;line-height:1.6">点击下方「下载文件」保存到手机</p>
+        <div style="display:flex;gap:10px;margin-top:6px">
+          <button id="savePanelDownload" class="abtn primary" style="flex:1">下载文件</button>
           <button id="savePanelClose" class="abtn ghost" style="flex:1">关闭</button>
         </div>
       </div>
@@ -1934,37 +1930,51 @@ function audioBufferToWav(buffer){
   return new Blob([ab],{type:'audio/wav'});
 }
 function callSenseVoice(fileBlob,filename,cb){
-  var fd=new FormData();
-  fd.append('file',fileBlob,filename||'audio.webm');
-  fd.append('model','FunAudioLLM/SenseVoiceSmall');
-  var done=false;
-  var ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
-  var timer=setTimeout(function(){
-    if(!done){done=true;try{ctrl&&ctrl.abort()}catch(e){};toast('语音识别超时，请重试','warn');cb&&cb('');}
-  },60000);
-  var finish=function(text){
-    if(done)return;done=true;
-    clearTimeout(timer);
-    cb&&cb(text);
-  };
-  fetch('https://api.siliconflow.cn/v1/audio/transcriptions',{
-    method:'POST',
-    headers:{'Authorization':'Bearer '+SILICONFLOW_KEY},
-    body:fd,
-    signal:ctrl?ctrl.signal:undefined
-  }).then(function(r){
-    if(!r.ok)throw new Error('HTTP '+r.status);
-    return r.json();
-  }).then(function(data){
-    var text=(data&&data.text)||'';
-    if(!text){toast('未识别到语音内容','warn');finish('');return;}
-    try{text=text.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}]/gu,'').trim()}catch(e){}
-    finish(text);
-  }).catch(function(err){
-    if(done)return;
-    toast('语音识别失败：'+(err&&err.message||err),'warn');
-    finish('');
-  });
+  var MAX_RETRY=3,attempt=0;
+  function tryOnce(){
+    attempt++;
+    var fd=new FormData();
+    fd.append('file',fileBlob,filename||'audio.webm');
+    fd.append('model','FunAudioLLM/SenseVoiceSmall');
+    var done=false;
+    var ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
+    var timer=setTimeout(function(){
+      if(!done){done=true;try{ctrl&&ctrl.abort()}catch(e){}
+        if(attempt<MAX_RETRY){toast('识别超时，自动重试 '+(attempt+1)+'/'+MAX_RETRY,'warn');setTimeout(tryOnce,600);}
+        else{toast('语音识别超时，请重试','warn');cb&&cb('');}
+      }
+    },60000);
+    var finish=function(text){
+      if(done)return;done=true;
+      clearTimeout(timer);
+      cb&&cb(text);
+    };
+    fetch('https://api.siliconflow.cn/v1/audio/transcriptions',{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+SILICONFLOW_KEY},
+      body:fd,
+      signal:ctrl?ctrl.signal:undefined
+    }).then(function(r){
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      return r.json();
+    }).then(function(data){
+      var text=(data&&data.text)||'';
+      if(!text){
+        done=true;clearTimeout(timer);
+        if(attempt<MAX_RETRY){toast('未识别到内容，自动重试 '+(attempt+1)+'/'+MAX_RETRY,'warn');setTimeout(tryOnce,600);}
+        else{toast('未识别到语音内容','warn');cb&&cb('');}
+        return;
+      }
+      try{text=text.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}]/gu,'').trim()}catch(e){}
+      finish(text);
+    }).catch(function(err){
+      if(done)return;
+      done=true;clearTimeout(timer);
+      if(attempt<MAX_RETRY){toast('识别失败，自动重试 '+(attempt+1)+'/'+MAX_RETRY,'warn');setTimeout(tryOnce,800);}
+      else{toast('语音识别失败：'+(err&&err.message||err),'warn');cb&&cb('');}
+    });
+  }
+  tryOnce();
 }
 /* 无VAD时的默认拆分：按所有常见标点拆成多段 */
 function splitTextDefault(text){
@@ -2112,7 +2122,7 @@ function renderEdit(){
   });
 }
 function startSynthesis(){
-  if(editState!=='ready')return;
+  if(editState==='composing')return;
   editState='composing';
   stopBgmPreview();
   var media=$('editPreviewMedia');
@@ -2823,7 +2833,7 @@ function loop(){
     if(editState==='composing'){toast('正在合成中，请稍候','warn');return}
     startSynthesis();
   });
-  /* 保存视频按钮：合成完成后可用 */
+  /* 保存视频按钮：合成完成后可用，直接弹出保存面板 */
   $('editSaveBtn').addEventListener('click',function(){
     var clip=LAST_SHOT;if(!clip)return;
     if(editState!=='done'){toast('请先合成视频','warn');return}
@@ -2832,18 +2842,7 @@ function loop(){
     if(blob){
       var ext=(blob.type||'').indexOf('webm')>=0?'webm':'mp4';
       var fileName=name+'.'+ext;
-      /* 先尝试系统分享（支持分享的环境直接保存到相册） */
-      var shareOk=false;
-      if(navigator.canShare&&navigator.share){
-        try{
-          var f=new File([blob],fileName,{type:blob.type||'video/mp4'});
-          if(navigator.canShare({files:[f]})){
-            shareOk=true;
-            navigator.share({files:[f],title:'成片保存',text:fileName}).then(function(){}).catch(function(e){if(!e||e.name!=='AbortError')openSavePanel(blob,fileName)});
-          }
-        }catch(e){}
-      }
-      if(!shareOk)openSavePanel(blob,fileName);
+      openSavePanel(blob,fileName);
       return;
     }
     var url=clip.finalUrl||clip.url;
@@ -2855,72 +2854,28 @@ function loop(){
   /* 保存面板：显示成片视频，提供「保存到相册 / 浏览器打开 / 下载文件」三种方式 */
   function openSavePanel(blob,fileName){
     var blobUrl=URL.createObjectURL(blob);
-    var dataUrl=null;
     var sv=$('savePanelVideo');
     if(sv){sv.src=blobUrl;}
     var panel=$('savePanel');
     if(panel)panel.classList.remove('hide');
-
-    /* 预生成 base64 data URL：data URL 是自包含的，可跨窗口/跨上下文下载与打开，
-       解决 blob URL 仅页面内有效、window.open 打开空白的问题 */
-    if(blob.size<40*1024*1024){
-      try{
-        var fr=new FileReader();
-        fr.onload=function(){dataUrl=fr.result;};
-        fr.onerror=function(){dataUrl=null;};
-        fr.readAsDataURL(blob);
-      }catch(e){dataUrl=null;}
-    }
 
     var closePanel=function(){
       panel.classList.add('hide');
       if(sv){try{sv.pause()}catch(e){}}
     };
 
-    var tryShare=function(onfail){
-      try{
-        var f=new File([blob],fileName,{type:blob.type||'video/mp4'});
-        if(navigator.canShare&&navigator.share&&navigator.canShare({files:[f]})){
-          navigator.share({files:[f],title:'保存成片',text:fileName})
-            .then(function(){})
-            .catch(function(e){if(e&&e.name!=='AbortError'){toast('分享未完成，可改用其他方式','warn');if(onfail)onfail()}});
-          return true;
-        }
-      }catch(e){}
-      return false;
-    };
-
-    var doDownload=function(href){
-      var a=document.createElement('a');
-      a.href=href;a.download=fileName;
-      a.style.display='none';
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(function(){a.remove()},500);
-    };
-    var tryDownload=function(){
-      if(dataUrl){doDownload(dataUrl)}
-      else{doDownload(blobUrl)}
-      toast('已尝试下载，请在下载列表/文件查看','good');
-    };
-    var tryOpen=function(){
-      var href=dataUrl||blobUrl;
-      var w=null;
-      try{w=window.open(href,'_blank')}catch(e){}
-      if(w){w.focus();toast('已在浏览器打开，可长按视频保存','good');}
-      else{toast('浏览器被拦截，请点「下载文件」','warn');}
-    };
-
-    var svBtn=$('savePanelSave');
-    if(svBtn){
-      svBtn.onclick=function(){
-        if(!tryShare(function(){tryDownload()}))tryDownload();
+    var dl=$('savePanelDownload');
+    if(dl){
+      dl.onclick=function(){
+        var a=document.createElement('a');
+        a.href=blobUrl;a.download=fileName;
+        a.style.display='none';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function(){a.remove()},500);
+        toast('已尝试下载，请在下载列表/文件查看','good');
       };
     }
-    var opBtn=$('savePanelOpen');
-    if(opBtn){opBtn.onclick=tryOpen;}
-    var dl=$('savePanelDownload');
-    if(dl){dl.onclick=tryDownload;}
     var cl=$('savePanelClose');
     if(cl){cl.onclick=closePanel;}
     /* 点遮罩空白处关闭，不返回首页 */
