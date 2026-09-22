@@ -162,11 +162,22 @@ body.no-nav .bottomnav{display:none}
 .abtn.slim{flex:0 0 108px}
 .abtn:disabled{opacity:.4;pointer-events:none}
 
-/* 剪辑三步骤按钮（生成字幕 / 视频素材 / 音频素材） */
-.stepbtns{display:flex;gap:8px;margin:12px 0 2px}
-.stepbtn{flex:1;padding:13px 4px;border:1px solid var(--brand);background:var(--grad);color:#fff;border-radius:12px;font-size:14px;font-weight:700;letter-spacing:.5px;cursor:pointer;box-shadow:0 4px 12px rgba(184,0,0,.22);transition:all .2s}
-.stepbtn:active{transform:scale(.96)}
+/* 剪辑三步骤按钮（生成字幕 / 视频素材 / 音频素材）—— 竖排带序号 */
+.stepbtns{display:flex;flex-direction:column;gap:8px;margin:8px 0 4px}
+.stepbtn{width:100%;padding:11px 14px;display:flex;align-items:center;gap:10px;border:1px solid var(--brand);background:var(--grad);color:#fff;border-radius:12px;font-size:14.5px;font-weight:700;letter-spacing:.5px;cursor:pointer;box-shadow:0 4px 12px rgba(184,0,0,.18);transition:all .2s;text-align:left}
+.stepbtn:active{transform:scale(.97)}
+.stepbtn .stepno{flex:none;width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,.28);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800}
+.stepbtn .steptxt{flex:1}
+.stepbtn .stepstate{flex:none;font-size:11px;font-weight:600;opacity:.85}
 .stepbtn.done{background:#F1F1F1;color:#B0B0B0;border-color:#E4E4E4;box-shadow:none;font-weight:600}
+.stepbtn.done .stepno{background:#E0E0E0;color:#999}
+.stepbtn.active{border-color:#B80000;box-shadow:0 0 0 3px rgba(184,0,0,.15)}
+
+/* 剪辑界面紧凑布局：缩小预览，一屏可见 */
+#editHasShot h3{font-size:17px;margin-bottom:4px}
+#editHasShot #editShotInfo{font-size:11.5px;margin-bottom:8px;line-height:1.5}
+#editPreview{width:min(50vw,30vh)}
+#editHasShot .matpanel{margin:8px auto 0;padding:12px 12px}
 
 .editcard{width:100%;max-width:420px;margin:8vh auto 0;text-align:center;padding:38px 26px 32px;border-radius:var(--r-lg);background:var(--card);box-shadow:var(--shadow)}
 .editcard .bigicon{width:74px;height:74px;margin:0 auto 18px;border-radius:22px;display:flex;align-items:center;justify-content:center;background:var(--brand-soft)}
@@ -519,26 +530,21 @@ body.no-nav .bottomnav{display:none}
         </div>
       </div>
       <div class="stepbtns" id="editStepBtns">
-        <button class="stepbtn" id="stepSubtitle">生成字幕</button>
-        <button class="stepbtn" id="stepVideo">视频素材</button>
-        <button class="stepbtn" id="stepAudio">音频素材</button>
+        <button class="stepbtn" id="stepSubtitle"><span class="stepno">1</span><span class="steptxt">生成字幕</span><span class="stepstate" id="stepSubtitleState"></span></button>
+        <button class="stepbtn" id="stepVideo"><span class="stepno">2</span><span class="steptxt">视频素材</span><span class="stepstate" id="stepVideoState"></span></button>
+        <button class="stepbtn" id="stepAudio"><span class="stepno">3</span><span class="steptxt">音频素材</span><span class="stepstate" id="stepAudioState"></span></button>
       </div>
-      <div class="matpanel" id="matPanel">
-        <div class="mathead">
-          <b>素材库</b>
-          <span class="matsub">视频穿插到成片中间 · 音频作为 BGM</span>
-        </div>
-        <div class="mattabs">
-          <button class="on" data-mattab="video">视频素材</button>
-          <button data-mattab="audio">背景音乐</button>
-        </div>
+      <div class="matpanel hide" id="matPanel">
         <div class="matlist" id="matVideoList"></div>
         <div class="matlist hide" id="matAudioList"></div>
       </div>
-      <div class="flex gap-8 mt-4" style="flex-wrap:wrap">
-        <button class="abtn primary" id="editSaveBtn" style="flex:1;min-width:140px" disabled>保存成片</button>
-        <button class="abtn ghost" id="editRetakeBtn" style="flex:1;min-width:140px">重拍</button>
-        <button class="abtn ghost" id="editRestartBtn" style="flex:1;min-width:140px">重新配置</button>
+      <div class="flex gap-8 mt-3" style="flex-wrap:wrap">
+        <button class="abtn primary" id="editSynthesizeBtn" style="flex:1;min-width:120px">合成视频</button>
+        <button class="abtn primary" id="editSaveBtn" style="flex:1;min-width:120px" disabled>保存视频</button>
+      </div>
+      <div class="flex gap-8 mt-2" style="flex-wrap:wrap">
+        <button class="abtn ghost" id="editRetakeBtn" style="flex:1;min-width:120px">重拍</button>
+        <button class="abtn ghost" id="editRestartBtn" style="flex:1;min-width:120px">重新配置</button>
       </div>
     </div>
     <div id="savePanel" class="hide" style="position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:9990;display:flex;align-items:center;justify-content:center;padding:20px">
@@ -652,6 +658,13 @@ body.no-nav .bottomnav{display:none}
 var $=function(id){return document.getElementById(id)};
 var v=$('video'),ov=$('overlay'),octx=ov.getContext('2d');
 var isIOS=/iP(hone|ad|od)/.test(navigator.userAgent);
+
+/* ==== ES5 兼容层（旧 Android WebView 兼容，避免整段脚本因 ES6 语法解析失败） ==== */
+if(!Array.prototype.find)Array.prototype.find=function(fn){for(var i=0;i<this.length;i++){if(fn(this[i],i,this))return this[i]}return undefined};
+if(!String.prototype.startsWith)String.prototype.startsWith=function(s){return this.indexOf(s)===0};
+if(!String.prototype.endsWith)String.prototype.endsWith=function(s){var i=this.length-s.length;return i>=0&&this.lastIndexOf(s)===i};
+if(!String.prototype.padStart)String.prototype.padStart=function(n,c){var s=String(this);c=c||' ';while(s.length<n)s=c+s;return s};
+if(!Array.prototype.unique)Array.prototype.unique=function(){var a=[];for(var i=0;i<this.length;i++){if(a.indexOf(this[i])<0)a.push(this[i])}return a};
 
 var MODES={
   half:{label:'半身'},
@@ -1409,10 +1422,24 @@ function saveBlob(blob,name,title){
   fallbackSave(blob,name);
 }
 function fallbackSave(blob,name){
+  var blobUrl=URL.createObjectURL(blob);
   var a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);a.download=name;
+  a.href=blobUrl;a.download=name;
   document.body.appendChild(a);a.click();
   setTimeout(function(){a.remove()},300);
+  /* data URL 兜底：部分 webview 不支持 blob 下载，转 base64 再试 */
+  if(blob.size<40*1024*1024){
+    try{
+      var fr=new FileReader();
+      fr.onload=function(){
+        var a2=document.createElement('a');
+        a2.href=fr.result;a2.download=name;
+        document.body.appendChild(a2);a2.click();
+        setTimeout(function(){a2.remove()},300);
+      };
+      fr.readAsDataURL(blob);
+    }catch(e){}
+  }
   toast(isIOS?'若未开始保存，请长按画面，选择「存储」':'已开始保存，请在下载中查看','good');
 }
 
@@ -1558,26 +1585,25 @@ function fetchCosList(prefix){
   return fetch('https://sanhe-video-assets-v1-1257256483.cos.ap-guangzhou.myqcloud.com/?prefix=' + encodeURIComponent(prefix) + '&max-keys=1000').then(function(r){return r.text()})
 }
 function parseCosXmlKeys(xmlText){
-  const keys=[]
-  const dummy=document.createElement('textarea')
+  var keys=[]
+  var dummy=document.createElement('textarea')
   dummy.innerHTML=xmlText
-  const rows=dummy.value.split('\n')
-  for(const row of rows){
-    const m=row.match(/<Key>([^<]+)<\/Key>/)
+  var rows=dummy.value.split('\n')
+  for(var i=0;i<rows.length;i++){
+    var m=rows[i].match(/<Key>([^<]+)<\/Key>/)
     if(m) keys.push(m[1])
   }
   return keys
 }
 function getVideoFolders(cb){
   fetchCosList('视频素材/').then(parseCosXmlKeys).then(function(folders){
-    // 只取文件夹名（去掉前缀“视频素材/”且确保是文件夹而非 MP4 文件）
-    const folderNames=[]
-    for(const f of folders){
-      const name=f.trim()
-      if(name&&!name.toLowerCase().endsWith('.mp4')&&name!=='视频素材')folderNames.push(name)
+    var folderNames=[]
+    for(var i=0;i<folders.length;i++){
+      var name=folders[i].trim()
+      if(name&&name.toLowerCase().indexOf('.mp4')<0&&name!=='视频素材')folderNames.push(name)
     }
     cb&&cb(folderNames.unique())
-  }).catch(cb&&(cb([])))
+  }).catch(function(){cb&&cb([])})
 }
 function cosUrl(key){
   return COS_BASE + String(key).split('/').map(function(seg){return encodeURIComponent(seg)}).join('/');
@@ -1690,18 +1716,22 @@ function initCosMaterialUI(){
 function updateMatHint(){
   var n=EDIT_PLAN.inserts.length;
   var txt='视频穿插 '+(n>0?n+' 段':'未选择')+' · BGM '+(EDIT_PLAN.bgm?'已选':'未选择');
-  $('editShotInfo').textContent='视频素材已就绪。'+txt+'，点击保存开始合成';
+  $('editShotInfo').textContent='素材已就绪。'+txt+'，可点「合成视频」';
   updateStepBtns();
 }
 function updateStepBtns(){
   var sub=$('stepSubtitle'),vid=$('stepVideo'),aud=$('stepAudio');
   if(!sub||!vid||!aud)return;
-  if(window._generatedSubtitles&&window._generatedSubtitles.length)sub.classList.add('done');
-  else sub.classList.remove('done');
-  if(EDIT_PLAN.inserts&&EDIT_PLAN.inserts.length)vid.classList.add('done');
-  else vid.classList.remove('done');
-  if(EDIT_PLAN.bgm)aud.classList.add('done');
-  else aud.classList.remove('done');
+  var subSt=$('stepSubtitleState'),vidSt=$('stepVideoState'),audSt=$('stepAudioState');
+  var subDone=window._generatedSubtitles&&window._generatedSubtitles.length;
+  var vidDone=EDIT_PLAN.inserts&&EDIT_PLAN.inserts.length;
+  var audDone=!!EDIT_PLAN.bgm;
+  if(subDone)sub.classList.add('done');else sub.classList.remove('done');
+  if(vidDone)vid.classList.add('done');else vid.classList.remove('done');
+  if(audDone)aud.classList.add('done');else aud.classList.remove('done');
+  if(subSt)subSt.textContent=subDone?('已生成'+window._generatedSubtitles.length+'段'):'未完成';
+  if(vidSt)vidSt.textContent=vidDone?('已选'+EDIT_PLAN.inserts.length+'个'):'未选择';
+  if(audSt)audSt.textContent=audDone?'已选择':'未选择';
 }
 function triggerSubtitleGen(){
   var stepBtn=$('stepSubtitle');
@@ -1992,24 +2022,38 @@ function splitTextToNSegments(text,N){
 function stopBgmPreview(){
   if(bgmAudio){try{bgmAudio.pause()}catch(e){}bgmAudio=null;bgmPlayingId=null}
 }
+var matPanelTab=null;
+function setStepActive(t){
+  var vid=$('stepVideo'),aud=$('stepAudio');
+  if(vid)vid.classList.remove('active');
+  if(aud)aud.classList.remove('active');
+  if(t==='video'&&vid)vid.classList.add('active');
+  if(t==='audio'&&aud)aud.classList.add('active');
+}
 function switchMatTab(t){
-  var all=document.querySelectorAll('#matPanel .mattabs button');
-  for(var j=0;j<all.length;j++){
-    all[j].classList.toggle('on',all[j].getAttribute('data-mattab')===t);
+  var panel=$('matPanel');
+  /* 再次点击同一项 → 收起面板 */
+  if(matPanelTab===t){
+    panel.classList.add('hide');
+    matPanelTab=null;
+    setStepActive(null);
+    return;
   }
-  $('matVideoList').classList.toggle('hide',t!=='video');
-  $('matAudioList').classList.toggle('hide',t!=='audio');
-  if($('audioRefreshBtn'))$('audioRefreshBtn').classList.toggle('hide',t!=='audio');
-}
-function initMatTabs(){
-  var tabs=document.querySelectorAll('#matPanel .mattabs button');
-  for(var i=0;i<tabs.length;i++){
-    tabs[i].addEventListener('click',function(){
-      switchMatTab(this.getAttribute('data-mattab'));
-    });
+  matPanelTab=t;
+  panel.classList.remove('hide');
+  if(t==='video'){
+    $('matVideoList').classList.remove('hide');
+    $('matAudioList').classList.add('hide');
+    if($('audioRefreshBtn'))$('audioRefreshBtn').classList.add('hide');
+    renderMatLib();
+  }else{
+    $('matAudioList').classList.remove('hide');
+    $('matVideoList').classList.add('hide');
+    if($('audioRefreshBtn'))$('audioRefreshBtn').classList.remove('hide');
+    refreshAudio();
   }
+  setStepActive(t);
 }
-initMatTabs();
 
 /* 剪辑三步骤按钮：生成字幕 / 视频素材 / 音频素材 */
 function bindStepBtns(){
@@ -2042,8 +2086,8 @@ function renderEdit(){
     $('matPanel').classList.add('hide');
     $('editSynthOverlay').classList.add('hide');
     $('editSynthStatus').classList.add('hide');
+    $('editSynthesizeBtn').disabled=true;
     $('editSaveBtn').disabled=false;
-    $('editSaveBtn').textContent='保存成片';
     $('editShotInfo').textContent='照片素材已就绪，可直接保存';
     editState='done';
     return;
@@ -2054,13 +2098,14 @@ function renderEdit(){
   }
   media.src=LAST_SHOT.url;
   media.setAttribute('playsinline','');
-  $('matPanel').classList.remove('hide');
+  $('matPanel').classList.add('hide');
   $('editSynthOverlay').classList.add('hide');
   $('editSynthStatus').classList.add('hide');
   $('editSynthBar').style.width='0%';
-  $('editSaveBtn').disabled=false;
-  $('editSaveBtn').textContent='开始合成';
+  $('editSynthesizeBtn').disabled=false;
+  $('editSaveBtn').disabled=true;
   editState='ready';
+  matPanelTab=null;
   loadMaterialLib(function(){
     initCosMaterialUI();
     updateMatHint();
@@ -2078,6 +2123,7 @@ function startSynthesis(){
     if(unlockAc.state==='suspended'){unlockAc.resume().then(function(){try{unlockAc.close()}catch(e){}}).catch(function(){})}
     else{try{unlockAc.close()}catch(e){}}
   }catch(e){}
+  $('editSynthesizeBtn').disabled=true;
   $('editSaveBtn').disabled=true;
   $('editSynthOverlay').classList.remove('hide');
   $('editSynthStatus').classList.remove('hide');
@@ -2094,16 +2140,16 @@ function startSynthesis(){
     media.src=finalUrl;
     $('editSynthOverlay').classList.add('hide');
     $('editSynthStatus').classList.add('hide');
+    $('editSynthesizeBtn').disabled=false;
     $('editSaveBtn').disabled=false;
-    $('editSaveBtn').textContent='保存成片';
     editState='done';
-    $('editShotInfo').textContent='成片已合成（字幕+穿插素材+BGM），可直接保存到相册';
+    $('editShotInfo').textContent='成片已合成，可保存；如需调整素材可重新合成';
     toast('成片合成完成','good');
   }).catch(function(err){
     $('editSynthOverlay').classList.add('hide');
     $('editSynthStatus').classList.add('hide');
+    $('editSynthesizeBtn').disabled=false;
     $('editSaveBtn').disabled=false;
-    $('editSaveBtn').textContent='保存原始视频';
     editState='done';
     $('editShotInfo').textContent='合成失败，将保存原始视频：'+(err.message||err);
     toast('合成失败，保存原始视频','warn');
@@ -2772,10 +2818,15 @@ function loop(){
   }
   $('editBack').addEventListener('click',function(){switchView('home')});
   $('editHomeBtn').addEventListener('click',function(){switchView('home')});
+  /* 合成视频按钮：可随时（非合成中）重新合成 */
+  $('editSynthesizeBtn').addEventListener('click',function(){
+    if(editState==='composing'){toast('正在合成中，请稍候','warn');return}
+    startSynthesis();
+  });
+  /* 保存视频按钮：合成完成后可用 */
   $('editSaveBtn').addEventListener('click',function(){
     var clip=LAST_SHOT;if(!clip)return;
-    if(editState==='ready'){startSynthesis();return}
-    if(editState==='composing'){toast('正在合成中，请稍候','warn');return}
+    if(editState!=='done'){toast('请先合成视频','warn');return}
     var name='成片_'+new Date().toLocaleString('zh-CN',{hour12:false}).replace(/[/:\s]/g,'-');
     var blob=clip.finalBlob||clip.blob;
     if(blob){
@@ -2803,11 +2854,28 @@ function loop(){
   });
   /* 保存面板：显示成片视频，提供「保存到相册 / 浏览器打开 / 下载文件」三种方式 */
   function openSavePanel(blob,fileName){
-    var url=URL.createObjectURL(blob);
+    var blobUrl=URL.createObjectURL(blob);
+    var dataUrl=null;
     var sv=$('savePanelVideo');
-    if(sv){sv.src=url;}
+    if(sv){sv.src=blobUrl;}
     var panel=$('savePanel');
     if(panel)panel.classList.remove('hide');
+
+    /* 预生成 base64 data URL：data URL 是自包含的，可跨窗口/跨上下文下载与打开，
+       解决 blob URL 仅页面内有效、window.open 打开空白的问题 */
+    if(blob.size<40*1024*1024){
+      try{
+        var fr=new FileReader();
+        fr.onload=function(){dataUrl=fr.result;};
+        fr.onerror=function(){dataUrl=null;};
+        fr.readAsDataURL(blob);
+      }catch(e){dataUrl=null;}
+    }
+
+    var closePanel=function(){
+      panel.classList.add('hide');
+      if(sv){try{sv.pause()}catch(e){}}
+    };
 
     var tryShare=function(onfail){
       try{
@@ -2815,43 +2883,48 @@ function loop(){
         if(navigator.canShare&&navigator.share&&navigator.canShare({files:[f]})){
           navigator.share({files:[f],title:'保存成片',text:fileName})
             .then(function(){})
-            .catch(function(e){if(e&&e.name!=='AbortError'&&onfail)onfail()});
+            .catch(function(e){if(e&&e.name!=='AbortError'){toast('分享未完成，可改用其他方式','warn');if(onfail)onfail()}});
           return true;
         }
       }catch(e){}
       return false;
     };
-    var tryOpen=function(){
-      try{
-        var w=window.open(url,'_blank');
-        if(w)w.focus();
-        toast('已在浏览器打开视频，可长按保存','good');
-      }catch(e){toast('无法打开浏览器','bad')}
-    };
-    var tryDownload=function(){
+
+    var doDownload=function(href){
       var a=document.createElement('a');
-      a.href=url;a.download=fileName;
+      a.href=href;a.download=fileName;
       a.style.display='none';
       document.body.appendChild(a);
       a.click();
       setTimeout(function(){a.remove()},500);
-      toast('已尝试下载文件，请在下载列表查看','good');
+    };
+    var tryDownload=function(){
+      if(dataUrl){doDownload(dataUrl)}
+      else{doDownload(blobUrl)}
+      toast('已尝试下载，请在下载列表/文件查看','good');
+    };
+    var tryOpen=function(){
+      var href=dataUrl||blobUrl;
+      var w=null;
+      try{w=window.open(href,'_blank')}catch(e){}
+      if(w){w.focus();toast('已在浏览器打开，可长按视频保存','good');}
+      else{toast('浏览器被拦截，请点「下载文件」','warn');}
     };
 
     var svBtn=$('savePanelSave');
     if(svBtn){
       svBtn.onclick=function(){
-        if(!tryShare(function(){tryDownload()})){
-          tryDownload();
-        }
+        if(!tryShare(function(){tryDownload()}))tryDownload();
       };
     }
     var opBtn=$('savePanelOpen');
     if(opBtn){opBtn.onclick=tryOpen;}
     var dl=$('savePanelDownload');
-    if(dl){dl.onclick=function(){if(!tryShare(function(){tryDownload()}))tryDownload()};}
+    if(dl){dl.onclick=tryDownload;}
     var cl=$('savePanelClose');
-    if(cl){cl.onclick=function(){panel.classList.add('hide');if(sv)sv.pause();};}
+    if(cl){cl.onclick=closePanel;}
+    /* 点遮罩空白处关闭，不返回首页 */
+    panel.onclick=function(e){if(e.target===panel)closePanel();};
   }
   $('editRetakeBtn').addEventListener('click',function(){
     stopBgmPreview();
