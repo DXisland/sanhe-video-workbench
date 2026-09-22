@@ -162,6 +162,12 @@ body.no-nav .bottomnav{display:none}
 .abtn.slim{flex:0 0 108px}
 .abtn:disabled{opacity:.4;pointer-events:none}
 
+/* 剪辑三步骤按钮（生成字幕 / 视频素材 / 音频素材） */
+.stepbtns{display:flex;gap:8px;margin:12px 0 2px}
+.stepbtn{flex:1;padding:13px 4px;border:1px solid var(--brand);background:var(--grad);color:#fff;border-radius:12px;font-size:14px;font-weight:700;letter-spacing:.5px;cursor:pointer;box-shadow:0 4px 12px rgba(184,0,0,.22);transition:all .2s}
+.stepbtn:active{transform:scale(.96)}
+.stepbtn.done{background:#F1F1F1;color:#B0B0B0;border-color:#E4E4E4;box-shadow:none;font-weight:600}
+
 .editcard{width:100%;max-width:420px;margin:8vh auto 0;text-align:center;padding:38px 26px 32px;border-radius:var(--r-lg);background:var(--card);box-shadow:var(--shadow)}
 .editcard .bigicon{width:74px;height:74px;margin:0 auto 18px;border-radius:22px;display:flex;align-items:center;justify-content:center;background:var(--brand-soft)}
 .editcard .bigicon svg{width:36px;height:36px;color:var(--brand)}
@@ -261,7 +267,7 @@ body.no-nav .bottomnav{display:none}
 #prompter.on{display:flex}
 #prompterDrag{flex:none;height:30px;display:flex;align-items:center;justify-content:center;cursor:grab;color:rgba(255,255,255,.4);font-size:16px;letter-spacing:4px}
 #prompterDrag:active{cursor:grabbing}
-#prompterText{flex:1;width:100%;background:transparent;border:none;color:#fff;font-size:30px;line-height:1.8;padding:8px 14px;outline:none;resize:none;overflow-y:auto;font-family:inherit;-webkit-user-select:text;user-select:text;text-shadow:0 0 2px #000,0 0 6px rgba(0,0,0,.85),0 1px 2px rgba(0,0,0,.9),0 2px 6px rgba(0,0,0,.6);-webkit-text-stroke:0.5px rgba(0,0,0,.45)}
+#prompterText{flex:1;width:100%;background:transparent;border:none;color:#fff;font-size:22px;line-height:1.8;padding:8px 14px;outline:none;resize:none;overflow-y:auto;font-family:inherit;-webkit-user-select:text;user-select:text;text-shadow:0 0 2px #000,0 0 6px rgba(0,0,0,.85),0 1px 2px rgba(0,0,0,.9),0 2px 6px rgba(0,0,0,.6);-webkit-text-stroke:0.5px rgba(0,0,0,.45)}
 #prompterText::placeholder{color:rgba(255,255,255,.3)}
 #prompterCtrl{flex:none;display:flex;align-items:center;gap:8px;padding:7px 12px;border-top:1px solid rgba(255,255,255,.1)}
 #prompterCtrl button{background:rgba(255,255,255,.1);border:none;color:#fff;border-radius:999px;padding:5px 12px;font-size:12px;pointer-events:auto}
@@ -512,6 +518,11 @@ body.no-nav .bottomnav{display:none}
           </div>
         </div>
       </div>
+      <div class="stepbtns" id="editStepBtns">
+        <button class="stepbtn" id="stepSubtitle">生成字幕</button>
+        <button class="stepbtn" id="stepVideo">视频素材</button>
+        <button class="stepbtn" id="stepAudio">音频素材</button>
+      </div>
       <div class="matpanel" id="matPanel">
         <div class="mathead">
           <b>素材库</b>
@@ -533,11 +544,14 @@ body.no-nav .bottomnav{display:none}
     <div id="savePanel" class="hide" style="position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:9990;display:flex;align-items:center;justify-content:center;padding:20px">
       <div style="background:#fff;border-radius:14px;padding:20px;width:92%;max-width:420px;text-align:center">
         <div style="font-size:16px;font-weight:800;color:#333;margin-bottom:10px">保存成片</div>
-        <video id="savePanelVideo" controls playsinline webkit-playsinline style="width:100%;border-radius:10px;background:#000;max-height:46vh;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto;touch-action:manipulation"></video>
-        <p style="font-size:13px;color:#666;margin:10px 0 4px">长按上方视频，选择「存储视频」即可保存到相册</p>
-        <p id="savePanelHint" class="hide" style="font-size:12px;color:#999;margin:0 0 8px">也可以点下方按钮尝试直接下载</p>
-        <div style="display:flex;gap:10px;margin-top:8px">
-          <button id="savePanelDownload" class="abtn primary" style="flex:1">下载文件</button>
+        <video id="savePanelVideo" controls playsinline webkit-playsinline style="width:100%;border-radius:10px;background:#000;max-height:42vh;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto;touch-action:manipulation"></video>
+        <p style="font-size:13px;color:#666;margin:10px 0 6px;line-height:1.6">点击「保存到相册」直接存入手机相册<br>如无反应，可长按上方视频选「存储视频」</p>
+        <div style="display:flex;gap:10px;margin-top:4px">
+          <button id="savePanelSave" class="abtn primary" style="flex:1">保存到相册</button>
+          <button id="savePanelOpen" class="abtn ghost" style="flex:1">浏览器打开</button>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:10px">
+          <button id="savePanelDownload" class="abtn ghost" style="flex:1">下载文件</button>
           <button id="savePanelClose" class="abtn ghost" style="flex:1">关闭</button>
         </div>
       </div>
@@ -590,17 +604,13 @@ body.no-nav .bottomnav{display:none}
   </div>
 
   <div id="ctl">
-    <div id="seg">
-      <button id="segVideo" class="on">录像</button>
-      <button id="segPhoto">拍照</button>
-    </div>
     <div id="modes">
       <button data-mode="half" class="on">半身</button>
       <button data-mode="full">全身</button>
     </div>
     <div id="row3">
       <button class="sbtn" id="flipHBtn" title="水平翻转"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3L4 8l5 5M4 8h12a4 4 0 0 1 0 8h-3"/><path d="M15 16l5 5-5 5" transform="rotate(180 15 18)"/></svg><span class="lbl">镜像</span></button>
-      <button id="shutter"></button>
+      <button id="shutter" class="video"></button>
       <button class="sbtn" id="flipVBtn" title="垂直翻转"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l5-5 5 5M8 4v12a4 4 0 0 0 8 0v-3"/></svg><span class="lbl">垂直</span></button>
     </div>
   </div>
@@ -614,7 +624,7 @@ body.no-nav .bottomnav{display:none}
       <div class="feat"><i></i><div><b>亮度 / 水平</b>：仅在需要调整时提示，分区域弹出不重叠</div></div>
       <div class="feat"><i></i><div><b>人声检测</b>：收声太小实时提示，自动降噪</div></div>
       <div class="feat"><i></i><div><b>提词器</b>：板块一生成的口播文案自动带入，支持自动滚动</div></div>
-      <div class="feat"><i></i><div><b>镜像 / 垂直翻转</b>，支持录像与拍照，导出 MP4 高清视频</div></div>
+      <div class="feat"><i></i><div><b>镜像 / 垂直翻转</b>，支持视频录像，导出 MP4 高清视频</div></div>
     </div>
     <button id="startBtn">开 启 摄 像 头</button>
     <div id="errCard"></div>
@@ -1356,16 +1366,6 @@ function setRecUI(on){
   $('timer').classList.toggle('show',on);
   $('flipHBtn').disabled=on;
   $('flipVBtn').disabled=on;
-  $('segVideo').disabled=on;
-  $('segPhoto').disabled=on;
-}
-function takePhoto(){
-  var cw=1080,ch=1920;
-  var cn=document.createElement('canvas');cn.width=cw;cn.height=ch;
-  var c=cn.getContext('2d');
-  drawFrame(c,cw,ch);
-  cn.toBlob(function(b){if(b)showSheet('photo',b)},'image/jpeg',0.93);
-  navigator.vibrate&&navigator.vibrate(15);
 }
 
 function showSheet(kind,blob){
@@ -1423,7 +1423,7 @@ function requestWakeLock(){
   }catch(e){}
 }
 
-var prompter={fontSize:30,speed:10,autoScroll:false,raf:null,scrollTop:0,scrollAcc:0};
+var prompter={fontSize:22,speed:10,autoScroll:false,raf:null,scrollTop:0,scrollAcc:0};
 function openPrompter(){
   $('prompter').classList.add('on');
   $('prompterBtn').style.opacity='1';
@@ -1691,46 +1691,45 @@ function updateMatHint(){
   var n=EDIT_PLAN.inserts.length;
   var txt='视频穿插 '+(n>0?n+' 段':'未选择')+' · BGM '+(EDIT_PLAN.bgm?'已选':'未选择');
   $('editShotInfo').textContent='视频素材已就绪。'+txt+'，点击保存开始合成';
-  renderSubtitleControls();
+  updateStepBtns();
 }
-function renderSubtitleControls(){
-  var wrap=$('subtitleControls');
-  if(!wrap){
-    var d=document.createElement('div');
-    d.id='subtitleControls';
-    d.style.cssText='display:flex;align-items:center;gap:8px;margin:2px 0 14px;flex-wrap:wrap;';
-    var p=$('editShotInfo');
-    if(p&&p.parentNode)p.parentNode.insertBefore(d,p.nextSibling);
-    wrap=d;
-  }
-  wrap.innerHTML='<button id="subtitleGenBtn" style="padding:6px 14px;border-radius:6px;border:1px solid #B80000;background:#B80000;color:#fff;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap">识别生成字幕</button>'
-    +'<span style="font-size:11px;color:#999;line-height:1.3">如不需要自动识别字幕请勿点击</span>';
-  $('subtitleGenBtn').onclick=function(){
-    var btn=$('subtitleGenBtn');if(btn)btn.disabled=true;
-    var overlay=document.createElement('div');
-    overlay.id='subGenOverlay';
-    overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;';
-    overlay.innerHTML='<div style="background:#fff;border-radius:12px;padding:28px 24px;text-align:center;max-width:280px;box-shadow:0 4px 20px rgba(0,0,0,.3)">'
-      +'<div style="font-size:15px;font-weight:600;color:#333;margin-bottom:10px">正在生成字幕中</div>'
-      +'<div style="font-size:13px;color:#888">请勿关闭页面</div>'
-      +'<div style="margin-top:14px"><span class="subGenSpinner" style="display:inline-block;width:24px;height:24px;border:3px solid #ddd;border-top-color:#B80000;border-radius:50%;animation:spin .8s linear infinite"></span></div></div>';
-    document.body.appendChild(overlay);
-    var style=document.createElement('style');
-    style.textContent='@keyframes spin{to{transform:rotate(360deg)}}';
-    document.head.appendChild(style);
-    recognizeSubtitle(function(lines){
-      var ov=document.getElementById('subGenOverlay');if(ov)ov.remove();
-      if(style.parentNode)style.remove();
-      if(btn)btn.disabled=false;
-      if(!lines||!lines.length){toast('未识别到人声，请重试','warn');return;}
-      generateSubtitleLines(lines);
-    });
-  };
+function updateStepBtns(){
+  var sub=$('stepSubtitle'),vid=$('stepVideo'),aud=$('stepAudio');
+  if(!sub||!vid||!aud)return;
+  if(window._generatedSubtitles&&window._generatedSubtitles.length)sub.classList.add('done');
+  else sub.classList.remove('done');
+  if(EDIT_PLAN.inserts&&EDIT_PLAN.inserts.length)vid.classList.add('done');
+  else vid.classList.remove('done');
+  if(EDIT_PLAN.bgm)aud.classList.add('done');
+  else aud.classList.remove('done');
+}
+function triggerSubtitleGen(){
+  var stepBtn=$('stepSubtitle');
+  if(stepBtn)stepBtn.disabled=true;
+  var overlay=document.createElement('div');
+  overlay.id='subGenOverlay';
+  overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  overlay.innerHTML='<div style="background:#fff;border-radius:12px;padding:28px 24px;text-align:center;max-width:280px;box-shadow:0 4px 20px rgba(0,0,0,.3)">'
+    +'<div style="font-size:15px;font-weight:600;color:#333;margin-bottom:10px">正在生成字幕中</div>'
+    +'<div style="font-size:13px;color:#888">请勿关闭页面</div>'
+    +'<div style="margin-top:14px"><span class="subGenSpinner" style="display:inline-block;width:24px;height:24px;border:3px solid #ddd;border-top-color:#B80000;border-radius:50%;animation:spin .8s linear infinite"></span></div></div>';
+  document.body.appendChild(overlay);
+  var style=document.createElement('style');
+  style.textContent='@keyframes spin{to{transform:rotate(360deg)}}';
+  document.head.appendChild(style);
+  recognizeSubtitle(function(lines){
+    var ov=document.getElementById('subGenOverlay');if(ov)ov.remove();
+    if(style.parentNode)style.remove();
+    if(stepBtn)stepBtn.disabled=false;
+    if(!lines||!lines.length){toast('未识别到人声，请重试','warn');return;}
+    generateSubtitleLines(lines);
+  });
 }
 function generateSubtitleLines(lines){
   window._generatedSubtitles=lines;
   $('editShotInfo').textContent='字幕已生成('+lines.length+'段)，可在合成预览中查看';
   toast('字幕已生成 '+lines.length+' 段','good');
+  updateStepBtns();
 }
 function generateSubtitleFromScript(){
   var info=window._shootScriptInfo||{};
@@ -1993,21 +1992,42 @@ function splitTextToNSegments(text,N){
 function stopBgmPreview(){
   if(bgmAudio){try{bgmAudio.pause()}catch(e){}bgmAudio=null;bgmPlayingId=null}
 }
+function switchMatTab(t){
+  var all=document.querySelectorAll('#matPanel .mattabs button');
+  for(var j=0;j<all.length;j++){
+    all[j].classList.toggle('on',all[j].getAttribute('data-mattab')===t);
+  }
+  $('matVideoList').classList.toggle('hide',t!=='video');
+  $('matAudioList').classList.toggle('hide',t!=='audio');
+  if($('audioRefreshBtn'))$('audioRefreshBtn').classList.toggle('hide',t!=='audio');
+}
 function initMatTabs(){
   var tabs=document.querySelectorAll('#matPanel .mattabs button');
   for(var i=0;i<tabs.length;i++){
     tabs[i].addEventListener('click',function(){
-      var t=this.getAttribute('data-mattab');
-      var all=document.querySelectorAll('#matPanel .mattabs button');
-      for(var j=0;j<all.length;j++)all[j].classList.remove('on');
-      this.classList.add('on');
-      $('matVideoList').classList.toggle('hide',t!=='video');
-      $('matAudioList').classList.toggle('hide',t!=='audio');
-      if($('audioRefreshBtn'))$('audioRefreshBtn').classList.toggle('hide',t!=='audio');
+      switchMatTab(this.getAttribute('data-mattab'));
     });
   }
 }
 initMatTabs();
+
+/* 剪辑三步骤按钮：生成字幕 / 视频素材 / 音频素材 */
+function bindStepBtns(){
+  var sub=$('stepSubtitle'),vid=$('stepVideo'),aud=$('stepAudio');
+  if(sub&&!sub._bound){
+    sub._bound=true;
+    sub.addEventListener('click',function(){triggerSubtitleGen()});
+  }
+  if(vid&&!vid._bound){
+    vid._bound=true;
+    vid.addEventListener('click',function(){switchMatTab('video')});
+  }
+  if(aud&&!aud._bound){
+    aud._bound=true;
+    aud.addEventListener('click',function(){switchMatTab('audio')});
+  }
+}
+bindStepBtns();
 
 function renderEdit(){
   var has=!!LAST_SHOT;
@@ -2629,18 +2649,11 @@ $('startBtn').addEventListener('click',function(){
 
 $('camBack').addEventListener('click',function(){switchView('home')});
 
-$('segPhoto').addEventListener('click',function(){
-  if(S.recording)return;
-  S.shoot='photo';
-  $('segPhoto').classList.add('on');$('segVideo').classList.remove('on');
-  $('shutter').classList.remove('video');
+$('shutter').addEventListener('click',function(){
+  if(S.recording)stopRecord();
+  else startRecord();
 });
-$('segVideo').addEventListener('click',function(){
-  if(S.recording)return;
-  S.shoot='video';
-  $('segVideo').classList.add('on');$('segPhoto').classList.remove('on');
-  $('shutter').classList.add('video');
-});
+
 (function(){
   var bs=document.querySelectorAll('#modes button');
   for(var i=0;i<bs.length;i++){
@@ -2656,11 +2669,6 @@ $('segVideo').addEventListener('click',function(){
   }
 })();
 
-$('shutter').addEventListener('click',function(){
-  if(S.shoot==='photo')takePhoto();
-  else if(S.recording)stopRecord();
-  else startRecord();
-});
 $('flipHBtn').addEventListener('click',function(){S.flipH=!S.flipH;applyFlip()});
 $('flipVBtn').addEventListener('click',function(){S.flipV=!S.flipV;applyFlip()});
 $('zoomChip').addEventListener('click',function(){setZoom(1)});
@@ -2793,51 +2801,55 @@ function loop(){
     a.download=name+ext2;
     a.click();toast('已开始保存成片','good');
   });
-  /* 保存面板：显示成片视频，引导长按存储 + 提供下载按钮 */
+  /* 保存面板：显示成片视频，提供「保存到相册 / 浏览器打开 / 下载文件」三种方式 */
   function openSavePanel(blob,fileName){
     var url=URL.createObjectURL(blob);
     var sv=$('savePanelVideo');
     if(sv){sv.src=url;}
     var panel=$('savePanel');
     if(panel)panel.classList.remove('hide');
-    var dl=$('savePanelDownload');
-    if(dl){
-      dl.onclick=function(){
-        var hint=$('savePanelHint');
-        var tryShare=function(){
-          try{
-            var f=new File([blob],fileName,{type:blob.type||'video/mp4'});
-            if(navigator.canShare&&navigator.share&&navigator.canShare({files:[f]})){
-              navigator.share({files:[f],title:'保存成片',text:fileName}).then(function(){}).catch(function(e){if(e&&e.name!=='AbortError')tryOpen();});
-              return true;
-            }
-          }catch(e){}
-          return false;
-        };
-        var tryOpen=function(){
-          /* 在新窗口打开视频，用户可播放并长按保存 */
-          try{
-            var w=window.open(url,'_blank');
-            if(w)w.focus();
-            if(hint){hint.classList.remove('hide');hint.textContent='已在浏览器打开视频，可长按保存；或直接长按上方视频选「存储视频」';}
-          }catch(e){}
-        };
-        var tryDownload=function(){
-          var a=document.createElement('a');
-          a.href=url;a.download=fileName;
-          a.style.display='none';
-          document.body.appendChild(a);
-          a.click();
-          setTimeout(function(){a.remove()},500);
-          if(hint){hint.classList.remove('hide');hint.textContent='已尝试下载，若未开始下载：长按上方视频选「存储视频」，或点击下方按钮在浏览器打开';}
-        };
-        /* 顺序：系统分享 → 直接下载 → 浏览器打开 */
-        if(!tryShare()){
+
+    var tryShare=function(onfail){
+      try{
+        var f=new File([blob],fileName,{type:blob.type||'video/mp4'});
+        if(navigator.canShare&&navigator.share&&navigator.canShare({files:[f]})){
+          navigator.share({files:[f],title:'保存成片',text:fileName})
+            .then(function(){})
+            .catch(function(e){if(e&&e.name!=='AbortError'&&onfail)onfail()});
+          return true;
+        }
+      }catch(e){}
+      return false;
+    };
+    var tryOpen=function(){
+      try{
+        var w=window.open(url,'_blank');
+        if(w)w.focus();
+        toast('已在浏览器打开视频，可长按保存','good');
+      }catch(e){toast('无法打开浏览器','bad')}
+    };
+    var tryDownload=function(){
+      var a=document.createElement('a');
+      a.href=url;a.download=fileName;
+      a.style.display='none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function(){a.remove()},500);
+      toast('已尝试下载文件，请在下载列表查看','good');
+    };
+
+    var svBtn=$('savePanelSave');
+    if(svBtn){
+      svBtn.onclick=function(){
+        if(!tryShare(function(){tryDownload()})){
           tryDownload();
-          setTimeout(tryOpen,1200);
         }
       };
     }
+    var opBtn=$('savePanelOpen');
+    if(opBtn){opBtn.onclick=tryOpen;}
+    var dl=$('savePanelDownload');
+    if(dl){dl.onclick=function(){if(!tryShare(function(){tryDownload()}))tryDownload()};}
     var cl=$('savePanelClose');
     if(cl){cl.onclick=function(){panel.classList.add('hide');if(sv)sv.pause();};}
   }
@@ -2846,7 +2858,9 @@ function loop(){
     var old=LAST_SHOT;if(old){if(old.url)URL.revokeObjectURL(old.url);if(old.finalUrl&&old.finalUrl!==old.url)URL.revokeObjectURL(old.finalUrl);}
     LAST_SHOT=null;window._shootSegments=[];window._shootScriptInfo={};
     window._speechSegments=null;
+    window._generatedSubtitles=null;
     EDIT_PLAN={inserts:[],bgm:null};
+    updateStepBtns();
     switchView('cam');
   });
   $('editRestartBtn').addEventListener('click',function(){
@@ -2854,7 +2868,9 @@ function loop(){
     var old=LAST_SHOT;if(old){if(old.url)URL.revokeObjectURL(old.url);if(old.finalUrl&&old.finalUrl!==old.url)URL.revokeObjectURL(old.finalUrl);}
     LAST_SHOT=null;window._shootSegments=[];window._shootScriptInfo={};
     window._speechSegments=null;
+    window._generatedSubtitles=null;
     EDIT_PLAN={inserts:[],bgm:null};
+    updateStepBtns();
     switchView('home');
   });
 })();
