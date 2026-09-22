@@ -1276,8 +1276,8 @@ function buildRecordStream(){
   var cc=cn.getContext('2d'),raf=null;
   var draw=function(){drawFrame(cc,720,1280);raf=requestAnimationFrame(draw)};
   draw();
-  var cs=cn.captureStream(30);
-  var vt=cs.getVideoTracks()[0];
+  var cs=null,vt=null;
+  try{cs=cn.captureStream(30);if(cs)vt=cs.getVideoTracks()[0]}catch(e){cs=null;vt=null}
   if(!vt){cancelAnimationFrame(raf);return null}
   var out=new MediaStream([vt]);
   S.stream.getAudioTracks().forEach(function(t){out.addTrack(t)});
@@ -2141,29 +2141,55 @@ function startSynthesis(){
   $('editSynthText').textContent='正在合成成片... 0%';
   var segs=window._shootSegments||[];
   var info=window._shootScriptInfo||{};
-  composeFinalClip(LAST_SHOT,segs,info,EDIT_PLAN,function(prog){
-    var pct=Math.round(prog*100);
-    $('editSynthBar').style.width=pct+'%';
-    $('editSynthText').textContent='正在合成成片... '+pct+'%';
-  }).then(function(finalUrl){
-    LAST_SHOT.finalUrl=finalUrl;
-    media.src=finalUrl;
+  /* 合成超时保护：90 秒没完成则恢复按钮，避免永久卡在"合成中" */
+  var synthTimeout=setTimeout(function(){
+    if(editState==='composing'){
+      $('editSynthOverlay').classList.add('hide');
+      $('editSynthStatus').classList.add('hide');
+      $('editSynthesizeBtn').disabled=false;
+      $('editSaveBtn').disabled=false;
+      editState='ready';
+      $('editShotInfo').textContent='合成超时，请重试';
+      toast('合成超时，请重试','warn');
+    }
+  },90000);
+  var clearT=function(){if(synthTimeout)clearTimeout(synthTimeout)};
+  try{
+    composeFinalClip(LAST_SHOT,segs,info,EDIT_PLAN,function(prog){
+      var pct=Math.round(prog*100);
+      $('editSynthBar').style.width=pct+'%';
+      $('editSynthText').textContent='正在合成成片... '+pct+'%';
+    }).then(function(finalUrl){
+      clearT();
+      LAST_SHOT.finalUrl=finalUrl;
+      media.src=finalUrl;
+      $('editSynthOverlay').classList.add('hide');
+      $('editSynthStatus').classList.add('hide');
+      $('editSynthesizeBtn').disabled=false;
+      $('editSaveBtn').disabled=false;
+      editState='done';
+      $('editShotInfo').textContent='成片已合成，可保存；如需调整素材可重新合成';
+      toast('成片合成完成','good');
+    }).catch(function(err){
+      clearT();
+      $('editSynthOverlay').classList.add('hide');
+      $('editSynthStatus').classList.add('hide');
+      $('editSynthesizeBtn').disabled=false;
+      $('editSaveBtn').disabled=false;
+      editState='done';
+      $('editShotInfo').textContent='合成失败，将保存原始视频：'+(err.message||err);
+      toast('合成失败，保存原始视频','warn');
+    });
+  }catch(e){
+    clearT();
     $('editSynthOverlay').classList.add('hide');
     $('editSynthStatus').classList.add('hide');
     $('editSynthesizeBtn').disabled=false;
     $('editSaveBtn').disabled=false;
     editState='done';
-    $('editShotInfo').textContent='成片已合成，可保存；如需调整素材可重新合成';
-    toast('成片合成完成','good');
-  }).catch(function(err){
-    $('editSynthOverlay').classList.add('hide');
-    $('editSynthStatus').classList.add('hide');
-    $('editSynthesizeBtn').disabled=false;
-    $('editSaveBtn').disabled=false;
-    editState='done';
-    $('editShotInfo').textContent='合成失败，将保存原始视频：'+(err.message||err);
-    toast('合成失败，保存原始视频','warn');
-  });
+    $('editShotInfo').textContent='合成出错：'+(e.message||e);
+    toast('合成出错，请重试','warn');
+  }
 }
 function teardownCam(){
   if(S.recording){try{stopRecord()}catch(e){}}
@@ -2416,7 +2442,12 @@ function buildSubTimeline(duration){
       var cw=Math.max(2,Math.round(vw*scale)),ch=Math.max(2,Math.round(vh*scale));
       var canvas=document.createElement('canvas');canvas.width=cw;canvas.height=ch;
       var ctx=canvas.getContext('2d');
-      var stream=canvas.captureStream(30);
+      var stream=null;
+      try{stream=canvas.captureStream(30)}catch(e){stream=null}
+      if(!stream||!stream.getVideoTracks||!stream.getVideoTracks().length){
+        reject(new Error('当前浏览器不支持画面合成'));
+        return;
+      }
 
       /* 音频：主视频人声 + BGM 同时进录制流和扬声器 */
       var audioCtx=null,audioDest=null,audioSrcNode=null;
@@ -2615,7 +2646,15 @@ function buildSubTimeline(duration){
 /* 把脚本文本拆成 _shootSegments 格式 */
 function parseScriptToSegments(text){
   var segs=[];
-  var splitSentences=function(t){return t.split(/(?<=[。！？；!?；])|\n/).map(function(s){return s.trim();}).filter(function(s){return s.length>0;});};
+  var splitSentences=function(t){
+    var parts=[],cur='';
+    for(var i=0;i<t.length;i++){
+      cur+=t.charAt(i);
+      if('。！？；!?；\n'.indexOf(t.charAt(i))>=0){if(cur.trim())parts.push(cur.trim());cur='';}
+    }
+    if(cur.trim())parts.push(cur.trim());
+    return parts;
+  };
   var lines=text.split('\n');
   lines.forEach(function(line){
     var clean=line.replace(/^[AB]\uFF1A/,'').trim();if(!clean)return;
