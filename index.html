@@ -1051,18 +1051,20 @@ var lastWarn={},lowStart=null,lowLatch=false;
 /* Voice announcements */
 var lastSpeakKey='',lastSpeakTime=0;
 function speak(msg,key){
-  if(!window.speechSynthesis)return;
-  var now=Date.now();
-  if(key&&key===lastSpeakKey&&now-lastSpeakTime<4000)return;
-  lastSpeakKey=key||'';lastSpeakTime=now;
-  speechSynthesis.cancel();
-  var u=new SpeechSynthesisUtterance(msg);
-  u.lang='zh-CN';u.rate=1;u.pitch=1;u.volume=1;
-  var voices=speechSynthesis.getVoices();
-  for(var i=0;i<voices.length;i++){
-    if(voices[i].lang.indexOf('zh')>=0){u.voice=voices[i];break}
-  }
-  speechSynthesis.speak(u);
+  try{
+    if(!window.speechSynthesis)return;
+    var now=Date.now();
+    if(key&&key===lastSpeakKey&&now-lastSpeakTime<4000)return;
+    lastSpeakKey=key||'';lastSpeakTime=now;
+    speechSynthesis.cancel();
+    var u=new SpeechSynthesisUtterance(msg);
+    u.lang='zh-CN';u.rate=1;u.pitch=1;u.volume=1;
+    var voices=speechSynthesis.getVoices();
+    for(var i=0;i<voices.length;i++){
+      if(voices[i]&&voices[i].lang&&voices[i].lang.indexOf('zh')>=0){u.voice=voices[i];break}
+    }
+    speechSynthesis.speak(u);
+  }catch(e){}
 }
 /* 立即播报（倒计时/严重倾斜等紧急提示） */
 function speakNow(msg,key){
@@ -1371,8 +1373,8 @@ function onRecordStop(){
   if(S.recMime.indexOf('webm')>=0)toast('当前为 WebM 格式，上传抖音前可能需要转成 MP4','warn');
 }
 function setRecUI(on){
-  $('shutter').classList.toggle('rec',on);
-  $('timer').classList.toggle('show',on);
+  if(on){$('shutter').classList.add('rec');$('timer').classList.add('show')}
+  else{$('shutter').classList.remove('rec');$('timer').classList.remove('show')}
   $('flipHBtn').disabled=on;
   $('flipVBtn').disabled=on;
 }
@@ -1398,8 +1400,12 @@ function showSheet(kind,blob){
   $('toEditBtn').onclick=function(){
     LAST_SHOT={kind:kind,blob:blob,url:url,duration:(kind==='video'?S.recDur:0)||0};
     closeSheet();
-    switchView('edit');
-    toast('素材已带入剪辑台','good');
+    try{
+      switchView('edit');
+      toast('素材已带入剪辑台','good');
+    }catch(e){
+      toast('进入剪辑失败：'+(e&&e.message||e),'bad');
+    }
   };
   $('sheetClose').onclick=closeSheet;
 }
@@ -2085,8 +2091,8 @@ bindStepBtns();
 
 function renderEdit(){
   var has=!!LAST_SHOT;
-  $('editEmpty').classList.toggle('hide',has);
-  $('editHasShot').classList.toggle('hide',!has);
+  if(has){$('editEmpty').classList.add('hide')}else{$('editEmpty').classList.remove('hide')}
+  if(has){$('editHasShot').classList.remove('hide')}else{$('editHasShot').classList.add('hide')}
   if(!has){initCosMaterialUI();return;}
   speakNow('视频正在剪辑中，请稍后','editEnter');
 
@@ -2801,7 +2807,7 @@ $('prompterSpeedDown').addEventListener('click',function(){
 });
 $('prompterAutoScroll').addEventListener('click',function(){
   prompter.autoScroll=!prompter.autoScroll;
-  $('prompterAutoScroll').classList.toggle('on',prompter.autoScroll);
+  if(prompter.autoScroll){$('prompterAutoScroll').classList.add('on')}else{$('prompterAutoScroll').classList.remove('on')}
   if(prompter.autoScroll)startPrompterScroll();
   else stopPrompterScroll();
 });
