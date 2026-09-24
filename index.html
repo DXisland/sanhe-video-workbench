@@ -305,7 +305,8 @@ body.no-nav .bottomnav{display:none}
 #sheet h3{font-size:18px;font-weight:800;letter-spacing:-.2px;color:var(--ink);margin-bottom:16px}
 #sheet .media{width:min(72vw,52vh);aspect-ratio:9/16;background:#000;border-radius:var(--r-md);overflow:hidden;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow2)}
 #sheet img,#sheet video{width:100%;height:100%;object-fit:contain;background:#000}
-#sheet .btns{display:flex;flex-wrap:wrap;gap:12px;margin-top:22px;width:100%;max-width:340px}
+#sheet .btns{display:flex;flex-wrap:wrap;gap:12px;margin-top:22px;width:100%;max-width:340px;position:relative;z-index:5}
+#sheet .btn{pointer-events:auto;cursor:pointer}
 #sheet .btn{flex:1 1 44%;padding:13px 26px;border-radius:var(--r-md);font-size:15px;font-weight:700;letter-spacing:.5px;border:none;background:var(--grad);color:#fff;box-shadow:0 8px 20px rgba(184,0,0,.3)}
 #sheet .btn:active{transform:scale(.96)}
 #sheet .btn.ghost{background:#fff;border:1px solid var(--line2);box-shadow:var(--shadow);color:var(--brand)}
@@ -520,7 +521,7 @@ body.no-nav .bottomnav{display:none}
       <span id="editSynthStatus" class="hide"></span>
       <p id="editShotInfo" style="font-size:12.5px;color:var(--ink2);margin-bottom:14px"></p>
       <div class="preview" id="editPreview" style="position:relative">
-        <video id="editPreviewMedia" controls playsinline style="width:100%;height:auto;border-radius:12px;background:#000"></video>
+        <video id="editPreviewMedia" controls playsinline webkit-playsinline x5-video-player-type="h5" x5-playsinline="true" style="width:100%;height:auto;border-radius:12px;background:#000"></video>
         <div id="editSynthOverlay" class="hide" style="position:absolute;inset:0;background:rgba(0,0,0,.82);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;border-radius:12px;z-index:10">
           <div style="width:40px;height:40px;border:3px solid rgba(255,255,255,.18);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite"></div>
           <div style="color:#fff;font-size:14px;font-weight:600" id="editSynthText">正在合成成片...</div>
@@ -550,7 +551,7 @@ body.no-nav .bottomnav{display:none}
     <div id="savePanel" class="hide" style="position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:9990;display:flex;align-items:center;justify-content:center;padding:20px">
       <div style="background:#fff;border-radius:14px;padding:20px;width:92%;max-width:420px;text-align:center">
         <div style="font-size:16px;font-weight:800;color:#333;margin-bottom:10px">保存成片</div>
-        <video id="savePanelVideo" controls playsinline webkit-playsinline style="width:100%;border-radius:10px;background:#000;max-height:42vh;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto;touch-action:manipulation"></video>
+        <video id="savePanelVideo" controls playsinline webkit-playsinline x5-video-player-type="h5" x5-playsinline="true" style="width:100%;border-radius:10px;background:#000;max-height:42vh;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto;touch-action:manipulation"></video>
         <p id="savePanelHint" style="font-size:13px;color:#666;margin:10px 0 6px;line-height:1.6">点击「下载文件」保存到手机；如无反应，可「在浏览器打开」后长按视频保存</p>
         <div style="display:flex;gap:10px;margin-top:6px">
           <button id="savePanelDownload" class="abtn primary" style="flex:1">下载文件</button>
@@ -566,7 +567,7 @@ body.no-nav .bottomnav{display:none}
 
 <div class="view" id="view-cam">
   <div id="cam">
-    <video id="video" muted playsinline></video>
+    <video id="video" muted playsinline webkit-playsinline x5-video-player-type="h5" x5-playsinline="true"></video>
   </div>
   <canvas id="overlay"></canvas>
 
@@ -1374,14 +1375,9 @@ function stopRecord(){
   S.recording=false;
   S.recDur=(Date.now()-S.recStart)/1000;
   clearInterval(S.recTimer);S.recTimer=null;
-  /* 双重 requestData + 延迟 stop：确保末尾缓冲数据全部 flush 再停止，避免丢秒 */
+  /* requestData 强制 flush 末尾缓冲，然后立即 stop，确保 onstop 可靠触发弹出完成面板 */
   try{S.recorder.requestData()}catch(e){}
-  setTimeout(function(){
-    try{S.recorder.requestData()}catch(e){}
-    setTimeout(function(){
-      try{S.recorder.stop()}catch(e){}
-    },200);
-  },200);
+  try{S.recorder.stop()}catch(e){}
 }
 function onRecordStop(){
   setRecUI(false);
@@ -1412,6 +1408,10 @@ function showSheet(kind,blob){
     var vv=document.createElement('video');
     vv.src=url;vv.controls=true;vv.playsInline=true;vv.muted=true;
     vv.setAttribute('playsinline','');
+    vv.setAttribute('webkit-playsinline','');
+    /* X5 内核同层播放：避免视频默认全屏/层级置顶遮挡「去剪辑」等按钮 */
+    vv.setAttribute('x5-video-player-type','h5');
+    vv.setAttribute('x5-playsinline','true');
     box.appendChild(vv);
   }
   $('sheet').classList.add('open');
@@ -1867,6 +1867,14 @@ function recognizeSubtitle(cb){
     if(sent)return;sent=true;
     cb&&cb(lines);
   };
+  /* 上传整个视频识别（回退方案），返回后统一拆分 */
+  var doVideoRecognize=function(b){
+    callSenseVoice(b,'video.mp4',function(text){
+      if(!text){finish([]);return;}
+      var lines=splitTextDefault(text);
+      finish((lines&&lines.length)?lines:[text]);
+    });
+  };
   var doRecognize=function(b){
     /* 优先解码出音频（快、体积小），VAD + 转WAV上传；失败才回退上传整段视频 */
     decodeVideoAudio(b,function(audioBuffer){
@@ -1877,7 +1885,11 @@ function recognizeSubtitle(cb){
         try{wav=audioBufferToWav(audioBuffer)}catch(e){}
         if(wav&&wav.size>0){
           callSenseVoice(wav,'audio.wav',function(text){
-            if(!text){finish([]);return;}
+            if(!text){
+              /* WAV 识别失败，回退上传整段视频再试一次 */
+              doVideoRecognize(b);
+              return;
+            }
             var lines;
             if(window._speechSegments&&window._speechSegments.length>0){
               lines=splitTextToNSegments(text,window._speechSegments.length);
@@ -1887,18 +1899,10 @@ function recognizeSubtitle(cb){
             finish((lines&&lines.length)?lines:[text]);
           });
         }else{
-          callSenseVoice(b,'video.mp4',function(text){
-            if(!text){finish([]);return;}
-            var lines=splitTextDefault(text);
-            finish((lines&&lines.length)?lines:[text]);
-          });
+          doVideoRecognize(b);
         }
       }else{
-        callSenseVoice(b,'video.mp4',function(text){
-          if(!text){finish([]);return;}
-          var lines=splitTextDefault(text);
-          finish((lines&&lines.length)?lines:[text]);
-        });
+        doVideoRecognize(b);
       }
     });
   };
@@ -1916,10 +1920,17 @@ function decodeVideoAudio(blob,cb){
   try{actx=new (window.AudioContext||window.webkitAudioContext)();}
   catch(e){finish(null);return;}
   setTimeout(function(){finish(null);},20000);
-  blob.arrayBuffer().then(function(buf){
+  var tryDecode=function(buf,retry){
     actx.decodeAudioData(buf.slice(0),function(audioBuffer){
       finish(audioBuffer);
-    },function(){finish(null);});
+    },function(){
+      /* 解码失败重试一次，缓解 iOS 上 decodeAudioData 偶发失败 */
+      if(retry>0){setTimeout(function(){tryDecode(buf,retry-1)},300);}
+      else{finish(null);}
+    });
+  };
+  blob.arrayBuffer().then(function(buf){
+    tryDecode(buf,1);
   }).catch(function(){finish(null);});
 }
 /* AudioBuffer 转单声道 16kHz 16bit WAV（体积小，上传快） */
@@ -2129,7 +2140,7 @@ function renderEdit(){
     return;
   }
   if(media.tagName!=='VIDEO'){
-    $('editPreviewMedia').outerHTML='<video id="editPreviewMedia" controls playsinline style="width:100%;height:auto;border-radius:12px;background:#000"></video>';
+    $('editPreviewMedia').outerHTML='<video id="editPreviewMedia" controls playsinline webkit-playsinline x5-video-player-type="h5" x5-playsinline="true" style="width:100%;height:auto;border-radius:12px;background:#000"></video>';
     media=$('editPreviewMedia');
   }
   media.src=LAST_SHOT.url;
