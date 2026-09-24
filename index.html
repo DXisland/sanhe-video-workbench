@@ -597,7 +597,6 @@ body.no-nav .bottomnav{display:none}
   </div>
 
   <div class="warnbox" id="warnBright"></div>
-  <div id="toast"></div>
 
   <div id="micPill">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5M8.5 21.5h7"/></svg>
@@ -649,6 +648,15 @@ body.no-nav .bottomnav{display:none}
 </div>
 
 <script>
+/* 全局错误捕获：把 JS 错误显示到屏幕底部，便于在真机上定位问题 */
+window.onerror=function(msg,src,line,col,err){
+  try{
+    var d=document.createElement('div');
+    d.style.cssText='position:fixed;bottom:0;left:0;right:0;z-index:99999;background:#C00;color:#fff;font-size:11px;padding:6px 8px;line-height:1.4;word-break:break-all;';
+    d.textContent='JS错误: '+(msg||'')+' (第'+line+'行)';
+    document.body.appendChild(d);
+  }catch(e){}
+};
 (function(){
 'use strict';
 var $=function(id){return document.getElementById(id)};
@@ -750,9 +758,18 @@ var FIELDS=['fProduct','fCity','fPrice','fGate','fValid','fDur','fCount','fDlg',
     }
   }
   if(push!==false){
-    suppressHash=true;
-    if(location.hash!=='#'+name)location.hash=name;
-    setTimeout(function(){suppressHash=false},0);
+    /* 用 history.replaceState 更新地址栏，避免 location.hash 在部分 WebView 里
+       触发页面刷新/hashchange 导致的重复渲染与状态丢失 */
+    try{
+      var target='#'+name;
+      if(history.replaceState){
+        history.replaceState(null,'',location.pathname+location.search+target);
+      }else if(location.hash!==target){
+        suppressHash=true;
+        location.hash=name;
+        setTimeout(function(){suppressHash=false},0);
+      }
+    }catch(e){}
   }
 }
 function routeFromHash(){
@@ -2954,5 +2971,6 @@ if(/embed=1|embed=true|bare=1/.test(location.search))document.body.classList.add
 routeFromHash();
 })();
 </script>
+<div id="toast"></div>
 </body>
 </html>
