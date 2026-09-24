@@ -551,9 +551,12 @@ body.no-nav .bottomnav{display:none}
       <div style="background:#fff;border-radius:14px;padding:20px;width:92%;max-width:420px;text-align:center">
         <div style="font-size:16px;font-weight:800;color:#333;margin-bottom:10px">保存成片</div>
         <video id="savePanelVideo" controls playsinline webkit-playsinline style="width:100%;border-radius:10px;background:#000;max-height:42vh;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto;touch-action:manipulation"></video>
-        <p id="savePanelHint" style="font-size:13px;color:#666;margin:10px 0 6px;line-height:1.6">点击下方「下载文件」保存到手机</p>
+        <p id="savePanelHint" style="font-size:13px;color:#666;margin:10px 0 6px;line-height:1.6">点击「下载文件」保存到手机；如无反应，可「在浏览器打开」后长按视频保存</p>
         <div style="display:flex;gap:10px;margin-top:6px">
           <button id="savePanelDownload" class="abtn primary" style="flex:1">下载文件</button>
+          <button id="savePanelOpen" class="abtn ghost" style="flex:1">在浏览器打开</button>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:10px">
           <button id="savePanelClose" class="abtn ghost" style="flex:1">关闭</button>
         </div>
       </div>
@@ -2913,29 +2916,57 @@ function loop(){
     a.download=name+ext2;
     a.click();toast('已开始保存成片','good');
   });
-  /* 保存面板：显示成片视频，提供「保存到相册 / 浏览器打开 / 下载文件」三种方式 */
+  /* 保存面板：显示成片视频，提供「下载文件 / 在浏览器打开」两种方式 */
   function openSavePanel(blob,fileName){
     var blobUrl=URL.createObjectURL(blob);
+    var dataUrl=null;
     var sv=$('savePanelVideo');
     if(sv){sv.src=blobUrl;}
     var panel=$('savePanel');
     if(panel)panel.classList.remove('hide');
+
+    /* 预生成 base64 data URL：自包含，可跨上下文下载/打开 */
+    if(blob.size<30*1024*1024){
+      try{
+        var fr=new FileReader();
+        fr.onload=function(){dataUrl=fr.result;};
+        fr.onerror=function(){dataUrl=null;};
+        fr.readAsDataURL(blob);
+      }catch(e){dataUrl=null;}
+    }
 
     var closePanel=function(){
       panel.classList.add('hide');
       if(sv){try{sv.pause()}catch(e){}}
     };
 
+    var doDownload=function(href){
+      var a=document.createElement('a');
+      a.href=href;a.download=fileName;
+      a.style.display='none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function(){a.remove()},500);
+    };
+
     var dl=$('savePanelDownload');
     if(dl){
       dl.onclick=function(){
-        var a=document.createElement('a');
-        a.href=blobUrl;a.download=fileName;
-        a.style.display='none';
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(function(){a.remove()},500);
+        /* 先 blob URL 下载，再 data URL 兜底下载 */
+        doDownload(blobUrl);
+        if(dataUrl){setTimeout(function(){doDownload(dataUrl)},800);}
         toast('已尝试下载，请在下载列表/文件查看','good');
+      };
+    }
+    var opBtn=$('savePanelOpen');
+    if(opBtn){
+      opBtn.onclick=function(){
+        /* 用 data URL 打开（跨上下文有效）；blob URL 仅当前页面有效 */
+        var href=dataUrl||blobUrl;
+        var w=null;
+        try{w=window.open(href,'_blank')}catch(e){}
+        if(w){try{w.focus()}catch(e){};toast('已在浏览器打开，可长按视频保存','good');}
+        else{toast('浏览器被拦截，请点「下载文件」','warn');}
       };
     }
     var cl=$('savePanelClose');
