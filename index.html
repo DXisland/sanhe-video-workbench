@@ -558,17 +558,23 @@ body.no-nav .bottomnav{display:none}
         <button class="abtn ghost" id="editRestartBtn" style="flex:1;min-width:120px">重新配置</button>
       </div>
     </div>
-    <div id="savePanel" class="hide" style="position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:9990;display:flex;align-items:center;justify-content:center;padding:20px">
-      <div style="background:#fff;border-radius:14px;padding:20px;width:92%;max-width:420px;text-align:center">
-        <div style="font-size:16px;font-weight:800;color:#333;margin-bottom:10px">保存成片</div>
-        <video id="savePanelVideo" controls playsinline webkit-playsinline x5-video-player-type="h5" x5-playsinline="true" style="width:100%;border-radius:10px;background:#000;max-height:42vh;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto;touch-action:manipulation"></video>
-        <p id="savePanelHint" style="font-size:13px;color:#666;margin:10px 0 6px;line-height:1.6">点击「下载文件」保存到手机；如无反应，可「在浏览器打开」后长按视频保存</p>
-        <div style="display:flex;gap:10px;margin-top:6px">
-          <button id="savePanelDownload" class="abtn primary" style="flex:1">下载文件</button>
-          <button id="savePanelOpen" class="abtn ghost" style="flex:1">在浏览器打开</button>
+    <div id="savePanel" class="hide" style="position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:9990;display:flex;align-items:center;justify-content:center;padding:16px">
+      <div style="background:#fff;border-radius:14px;padding:16px;width:94%;max-width:420px;max-height:88vh;overflow:auto;text-align:center;position:relative">
+        <button id="savePanelX" style="position:absolute;top:8px;right:10px;width:32px;height:32px;border:none;background:#f0f0f0;border-radius:50%;font-size:16px;line-height:1;color:#333;cursor:pointer">✕</button>
+        <div style="font-size:16px;font-weight:800;color:#333;margin-bottom:10px;padding-right:28px">保存成片</div>
+        <video id="savePanelVideo" controls playsinline webkit-playsinline x5-video-player-type="h5" x5-playsinline="true" style="width:100%;border-radius:10px;background:#000;max-height:34vh;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto;touch-action:manipulation"></video>
+        <p id="savePanelHint" style="font-size:13px;color:#666;margin:10px 0 6px;line-height:1.6">推荐点「生成链接」复制后到手机浏览器打开保存；也可点「下载文件」直接保存</p>
+        <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
+          <button id="savePanelDownload" class="abtn primary" style="flex:1;min-width:110px">下载文件</button>
+          <button id="savePanelOpen" class="abtn ghost" style="flex:1;min-width:110px">浏览器打开</button>
         </div>
-        <div style="display:flex;gap:10px;margin-top:10px">
-          <button id="savePanelClose" class="abtn ghost" style="flex:1">关闭</button>
+        <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
+          <button id="savePanelLink" class="abtn ghost" style="flex:1;min-width:110px">生成链接</button>
+          <button id="savePanelClose" class="abtn ghost" style="flex:1;min-width:110px">关闭</button>
+        </div>
+        <div id="savePanelLinkBox" class="hide" style="margin-top:10px;text-align:left">
+          <div style="font-size:12px;color:#999;margin-bottom:4px">已生成下载链接（复制到浏览器打开保存）：</div>
+          <textarea id="savePanelLinkText" readonly style="width:100%;height:52px;font-size:11px;color:#333;border:1px solid #e0e0e0;border-radius:8px;padding:6px;box-sizing:border-box;word-break:break-all"></textarea>
         </div>
       </div>
     </div>
@@ -2944,7 +2950,7 @@ function loop(){
     a.download=name+ext2;
     a.click();toast('已开始保存成片','good');
   });
-  /* 保存面板：显示成片视频，提供「下载文件 / 在浏览器打开」两种方式 */
+  /* 保存面板：显示成片视频，提供「下载文件 / 浏览器打开 / 生成链接」三种方式 */
   function openSavePanel(blob,fileName){
     var blobUrl=URL.createObjectURL(blob);
     var dataUrl=null;
@@ -2952,6 +2958,18 @@ function loop(){
     if(sv){sv.src=blobUrl;}
     var panel=$('savePanel');
     if(panel)panel.classList.remove('hide');
+    var linkBox=$('savePanelLinkBox');
+    if(linkBox)linkBox.classList.add('hide');
+    /* 环境检测：微信/企业微信内保存受限，提示改用系统浏览器 */
+    var isWx=/micromessenger|wxwork/i.test(navigator.userAgent);
+    var hintEl=$('savePanelHint');
+    if(hintEl){
+      if(isWx){
+        hintEl.textContent='当前在微信内，保存受限：点「生成链接」复制后到手机浏览器打开保存；或长按下方视频选「保存视频」';
+      }else{
+        hintEl.textContent='点「下载文件」直接保存到手机；失败可「生成链接」复制到浏览器打开保存';
+      }
+    }
 
     /* 预生成 base64 data URL：自包含，可跨上下文下载/打开 */
     if(blob.size<30*1024*1024){
@@ -2977,6 +2995,12 @@ function loop(){
       setTimeout(function(){a.remove()},500);
     };
 
+    var copyText=function(t){
+      if(navigator.clipboard&&navigator.clipboard.writeText){
+        navigator.clipboard.writeText(t).catch(function(){fallbackCopy(t)});
+      }else{fallbackCopy(t)}
+    };
+
     var dl=$('savePanelDownload');
     if(dl){
       dl.onclick=function(){
@@ -2994,11 +3018,55 @@ function loop(){
         var w=null;
         try{w=window.open(href,'_blank')}catch(e){}
         if(w){try{w.focus()}catch(e){};toast('已在浏览器打开，可长按视频保存','good');}
-        else{toast('浏览器被拦截，请点「下载文件」','warn');}
+        else{toast('浏览器被拦截，请点「生成链接」','warn');}
+      };
+    }
+    /* 生成链接：优先上传临时存储返回真实 http 链接；失败则复制本地 data URL 兜底 */
+    var linkBtn=$('savePanelLink');
+    if(linkBtn){
+      linkBtn.onclick=function(){
+        linkBtn.disabled=true;linkBtn.textContent='上传中...';
+        var fd=new FormData();
+        fd.append('reqtype','fileupload');
+        fd.append('time','72h');
+        fd.append('fileToUpload',blob,fileName);
+        var xhr=new XMLHttpRequest();
+        xhr.open('POST','https://litterbox.catbox.moe/resources/internals/api.php',true);
+        xhr.timeout=180000;
+        var fallbackCopyLink=function(){
+          /* 上传失败回退：视频较小时复制 data URL 链接 */
+          if(dataUrl&&dataUrl.length<8*1024*1024){
+            var lb=$('savePanelLinkBox'),lt=$('savePanelLinkText');
+            if(lb)lb.classList.remove('hide');
+            if(lt)lt.value=dataUrl;
+            copyText(dataUrl);
+            toast('上传失败，已复制本地链接（视频较小可到浏览器粘贴）','warn');
+          }else{
+            toast('上传失败，请用「下载文件」或「浏览器打开」','warn');
+          }
+        };
+        xhr.onload=function(){
+          linkBtn.disabled=false;linkBtn.textContent='生成链接';
+          var url=(xhr.responseText||'').trim();
+          if(xhr.status>=200&&xhr.status<300&&/^https?:\/\//.test(url)){
+            var lb=$('savePanelLinkBox'),lt=$('savePanelLinkText');
+            if(lb)lb.classList.remove('hide');
+            if(lt)lt.value=url;
+            copyText(url);
+            toast('链接已生成并复制，请到浏览器粘贴打开保存','good');
+          }else{
+            fallbackCopyLink();
+          }
+        };
+        xhr.onerror=function(){linkBtn.disabled=false;linkBtn.textContent='生成链接';fallbackCopyLink();};
+        xhr.ontimeout=function(){linkBtn.disabled=false;linkBtn.textContent='生成链接';toast('上传超时，请重试','warn');};
+        xhr.send(fd);
       };
     }
     var cl=$('savePanelClose');
     if(cl){cl.onclick=closePanel;}
+    var xBtn=$('savePanelX');
+    if(xBtn){xBtn.onclick=closePanel;}
     /* 点遮罩空白处关闭，不返回首页 */
     panel.onclick=function(e){if(e.target===panel)closePanel();};
   }
