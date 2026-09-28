@@ -692,14 +692,14 @@ var MODES={
    半身：头顶=中上格下半(0.27)、肩部=中格下半(0.58)
    全身：头顶=中上格下部(0.26)、腰部=中格中下(0.55)、膝盖=中下格中部(0.82) */
 var GUIDES={
-/* 卡片视图跳转：点击首页卡片 -> switchView */
+/* 卡片视图跳转：点击首页卡片 -> 设 location.hash，由 routeFromHash/routeFromHash 机制跳转（最稳、兼容所有 WebView） */
 (function(){
-  var cards=document.querySelectorAll('[data-view]');
+  var cards=document.querySelectorAll('.hcard[data-view]');
   for(var i=0;i<cards.length;i++){
     (function(card){
       card.onclick=function(){
         var view=card.getAttribute('data-view');
-        if(view&&switchView){switchView(view,false);}
+        if(view){location.hash='#'+view;}
       };
     })(cards[i]);
   }
