@@ -563,17 +563,13 @@ body.no-nav .bottomnav{display:none}
         <button id="savePanelX" style="position:absolute;top:8px;right:10px;width:32px;height:32px;border:none;background:#f0f0f0;border-radius:50%;font-size:16px;line-height:1;color:#333;cursor:pointer">✕</button>
         <div style="font-size:16px;font-weight:800;color:#333;margin-bottom:10px;padding-right:28px">保存成片 <span style="font-size:12px;color:#999;font-weight:600">v3.0</span></div>
         <video id="savePanelVideo" controls playsinline webkit-playsinline x5-video-player-type="h5" x5-playsinline="true" style="width:100%;border-radius:10px;background:#000;max-height:34vh;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto;touch-action:manipulation"></video>
-        <p id="savePanelHint" style="font-size:13px;color:#666;margin:10px 0 6px;line-height:1.6">微信内无法保存视频。请点「复制工具地址」，到手机浏览器打开后重新下载保存</p>
+        <p id="savePanelHint" style="font-size:13px;color:#666;margin:10px 0 6px;line-height:1.6">点「下载文件」保存到手机；或点「分享视频」直接发送到微信/企业微信保存</p>
         <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
           <button id="savePanelDownload" class="abtn primary" style="flex:1;min-width:110px">下载文件</button>
-          <button id="savePanelLink" class="abtn ghost" style="flex:1;min-width:110px">复制工具地址</button>
+          <button id="savePanelShare" class="abtn ghost" style="flex:1;min-width:110px">分享视频</button>
         </div>
         <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
           <button id="savePanelClose" class="abtn ghost" style="flex:1;min-width:110px">关闭</button>
-        </div>
-        <div id="savePanelLinkBox" class="hide" style="margin-top:10px;text-align:left">
-          <div style="font-size:12px;color:#999;margin-bottom:4px">工具地址（复制到手机浏览器打开）：</div>
-          <textarea id="savePanelLinkText" readonly style="width:100%;height:44px;font-size:11px;color:#333;border:1px solid #e0e0e0;border-radius:8px;padding:6px;box-sizing:border-box;word-break:break-all"></textarea>
         </div>
       </div>
     </div>
@@ -3011,16 +3007,18 @@ function loop(){
         toast('已尝试下载，请在下载列表/文件查看','good');
       };
     }
-    /* 复制工具地址：微信/企业微信内无法保存视频，引导用户到系统浏览器打开工具 */
-    var linkBtn=$('savePanelLink');
-    if(linkBtn){
-      linkBtn.onclick=function(){
-        var url=location.href.split('#')[0];
-        copyText(url);
-        var lb=$('savePanelLinkBox'),lt=$('savePanelLinkText');
-        if(lb)lb.classList.remove('hide');
-        if(lt)lt.value=url;
-        toast('已复制工具地址，请到手机浏览器打开后重新下载保存','good');
+    /* 分享视频：使用 Web Share API 将视频分享到微信/企业微信（现代浏览器支持），失败 fallback 到下载 */
+    var shareBtn=$('savePanelShare');
+    if(shareBtn){
+      shareBtn.onclick=function(){
+        if(!blob){toast('未检测到视频文件','warn');return;}
+        if(navigator.share){
+          navigator.share({files: [blob], title: '我的短视频'})
+            .then(function(){toast('分享成功，请在微信中查收并长按保存','good');})
+            .catch(function(){doDownload(blobUrl);toast('分享失败，已尝试下载保存','warn');});
+        }else{
+          doDownload(blobUrl);toast('当前浏览器不支持分享，直接下载保存','warn');
+        }
       };
     }
     var cl=$('savePanelClose');
