@@ -2375,7 +2375,7 @@ function composeFinalClip(clip, segments, scriptInfo, plan, onProgress){
     plan=plan||{inserts:[],bgm:null};
     var genSub=window._generatedSubtitles||[];
     var subtitleLines=(genSub.length?genSub:segments.map(function(s){return (s.line||'').trim();}).filter(function(l){return !!l;}));
-    var bigTitle=scriptInfo&&scriptInfo.title?scriptInfo.title:'';
+    var bigTitle='';/* 已移除视频上方标题（价格/手机型号），恒空不绘制 */
 
     /* 主视频 */
     var mainVideo=document.createElement('video');
