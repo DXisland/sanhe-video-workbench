@@ -566,7 +566,7 @@ body.no-nav .bottomnav{display:none}
         <p id="savePanelHint" style="font-size:13px;color:#666;margin:10px 0 6px;line-height:1.6">推荐点「生成链接」复制后到手机浏览器打开保存；也可点「下载文件」直接保存</p>
         <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
           <button id="savePanelDownload" class="abtn primary" style="flex:1;min-width:110px">下载文件</button>
-          <button id="savePanelOpen" class="abtn ghost" style="flex:1;min-width:110px">浏览器打开</button>
+          <button id="savePanelOpen" class="abtn ghost" style="flex:1;min-width:110px">复制链接</button>
         </div>
         <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
           <button id="savePanelLink" class="abtn ghost" style="flex:1;min-width:110px">生成链接</button>
@@ -2348,7 +2348,7 @@ function drawTitle(ctx,w,h,title){
   ctx.restore();
 }
 
-/* 绘制字幕：底部安全区，白字/关键词黄色+粗黑描边，默认1行，超长智能分2行 */
+/* 绘制字幕：底部安全区，白字/关键词黄色+粗黑描边，仅显示 1 行 */
 function drawSubtitle(ctx,w,h,text){
   if(!text)return;
   var fontSize=Math.round(h*0.045);
@@ -2358,7 +2358,7 @@ function drawSubtitle(ctx,w,h,text){
   ctx.textAlign='center';ctx.textBaseline='bottom';
   var maxChars=Math.floor(w*0.82/fontSize);
   var lines=wrapText(ctx,text,maxChars);
-  if(lines.length>2)lines=lines.slice(0,2);
+  if(lines.length>1)lines=lines.slice(0,1);
   var lineHeight=fontSize*1.3;
   var totalH=lines.length*lineHeight;
   var startY=h-Math.round(h*0.08)-totalH+lineHeight;
@@ -3013,12 +3013,29 @@ function loop(){
     var opBtn=$('savePanelOpen');
     if(opBtn){
       opBtn.onclick=function(){
-        /* 用 data URL 打开（跨上下文有效）；blob URL 仅当前页面有效 */
-        var href=dataUrl||blobUrl;
-        var w=null;
-        try{w=window.open(href,'_blank')}catch(e){}
-        if(w){try{w.focus()}catch(e){};toast('已在浏览器打开，可长按视频保存','good');}
-        else{toast('浏览器被拦截，请点「生成链接」','warn');}
+        /* 不跳转（易被拦截），直接复制链接供用户到浏览器粘贴打开 */
+        var doCopy=function(){
+          if(dataUrl){
+            copyText(dataUrl);
+            var lb=$('savePanelLinkBox'),lt=$('savePanelLinkText');
+            if(lb)lb.classList.remove('hide');
+            if(lt)lt.value=dataUrl;
+            toast('已复制链接，请到浏览器地址栏粘贴打开保存','good');
+          }else{
+            toast('视频较大无法生成链接，请用「下载文件」或「生成链接」','warn');
+          }
+        };
+        if(dataUrl){
+          doCopy();
+        }else if(blob.size<30*1024*1024){
+          toast('正在生成链接…','warn');
+          var fr=new FileReader();
+          fr.onload=function(){dataUrl=fr.result;doCopy();};
+          fr.onerror=function(){toast('生成失败，请用「下载文件」','warn');};
+          fr.readAsDataURL(blob);
+        }else{
+          toast('视频较大无法生成链接，请用「下载文件」或「生成链接」','warn');
+        }
       };
     }
     /* 生成链接：优先上传临时存储返回真实 http 链接；失败则复制本地 data URL 兜底 */
