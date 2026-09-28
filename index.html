@@ -563,13 +563,12 @@ body.no-nav .bottomnav{display:none}
         <button id="savePanelX" style="position:absolute;top:8px;right:10px;width:32px;height:32px;border:none;background:#f0f0f0;border-radius:50%;font-size:16px;line-height:1;color:#333;cursor:pointer">✕</button>
         <div style="font-size:16px;font-weight:800;color:#333;margin-bottom:10px;padding-right:28px">保存成片 <span style="font-size:12px;color:#999;font-weight:600">v3.0</span></div>
         <video id="savePanelVideo" controls playsinline webkit-playsinline x5-video-player-type="h5" x5-playsinline="true" style="width:100%;border-radius:10px;background:#000;max-height:34vh;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto;touch-action:manipulation"></video>
-        <p id="savePanelHint" style="font-size:13px;color:#666;margin:10px 0 6px;line-height:1.6">推荐点「生成链接」复制后到手机浏览器打开保存；也可点「下载文件」直接保存</p>
+        <p id="savePanelHint" style="font-size:13px;color:#666;margin:10px 0 6px;line-height:1.6">点「下载文件」直接保存；失败可「生成短链接」复制后到手机浏览器打开保存</p>
         <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
           <button id="savePanelDownload" class="abtn primary" style="flex:1;min-width:110px">下载文件</button>
-          <button id="savePanelOpen" class="abtn ghost" style="flex:1;min-width:110px">复制链接</button>
+          <button id="savePanelLink" class="abtn ghost" style="flex:1;min-width:110px">生成短链接</button>
         </div>
         <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
-          <button id="savePanelLink" class="abtn ghost" style="flex:1;min-width:110px">生成链接</button>
           <button id="savePanelClose" class="abtn ghost" style="flex:1;min-width:110px">关闭</button>
         </div>
         <div id="savePanelLinkBox" class="hide" style="margin-top:10px;text-align:left">
@@ -2478,8 +2477,10 @@ function buildSubTimeline(duration){
       var vw=mainVideo.videoWidth||640,vh=mainVideo.videoHeight||480;
       var D=mainVideo.duration;
       var recDur=parseFloat(clip.duration)||0;
-      if(!D||!isFinite(D)||D<=0)D=recDur||10;
-      else if(recDur>D+0.5)D=recDur;
+      /* 优先用录制时长（墙钟，可靠）：MediaRecorder 录制的 webm 其 video.duration
+         常为 Infinity 或偏小，导致合成提前结束、丢失末尾几秒 */
+      if(recDur>0.5)D=recDur;
+      else if(!D||!isFinite(D)||D<=0)D=10;
 
       /* 可用素材：加载失败的剔除；只有一个素材时两个插入点复用同一个 */
       var usable=[];
@@ -2965,14 +2966,14 @@ function loop(){
     var hintEl=$('savePanelHint');
     if(hintEl){
       if(isWx){
-        hintEl.textContent='当前在微信内，保存受限：点「生成链接」复制后到手机浏览器打开保存；或长按下方视频选「保存视频」';
+        hintEl.textContent='当前在微信内，保存受限：点「生成短链接」复制后到手机浏览器打开保存；或长按下方视频选「保存视频」';
       }else{
-        hintEl.textContent='点「下载文件」直接保存到手机；失败可「生成链接」复制到浏览器打开保存';
+        hintEl.textContent='点「下载文件」直接保存到手机；失败可「生成短链接」复制到浏览器打开保存';
       }
     }
 
-    /* 预生成 base64 data URL：自包含，可跨上下文下载/打开 */
-    if(blob.size<30*1024*1024){
+    /* 预生成 base64 data URL：仅小视频(<15MB)用于下载兜底，避免大视频生成超大 base64 卡内存 */
+    if(blob.size<15*1024*1024){
       try{
         var fr=new FileReader();
         fr.onload=function(){dataUrl=fr.result;};
@@ -3010,35 +3011,7 @@ function loop(){
         toast('已尝试下载，请在下载列表/文件查看','good');
       };
     }
-    var opBtn=$('savePanelOpen');
-    if(opBtn){
-      opBtn.onclick=function(){
-        /* 不跳转（易被拦截），直接复制链接供用户到浏览器粘贴打开 */
-        var doCopy=function(){
-          if(dataUrl){
-            copyText(dataUrl);
-            var lb=$('savePanelLinkBox'),lt=$('savePanelLinkText');
-            if(lb)lb.classList.remove('hide');
-            if(lt)lt.value=dataUrl;
-            toast('已复制链接，请到浏览器地址栏粘贴打开保存','good');
-          }else{
-            toast('视频较大无法生成链接，请用「下载文件」或「生成链接」','warn');
-          }
-        };
-        if(dataUrl){
-          doCopy();
-        }else if(blob.size<30*1024*1024){
-          toast('正在生成链接…','warn');
-          var fr=new FileReader();
-          fr.onload=function(){dataUrl=fr.result;doCopy();};
-          fr.onerror=function(){toast('生成失败，请用「下载文件」','warn');};
-          fr.readAsDataURL(blob);
-        }else{
-          toast('视频较大无法生成链接，请用「下载文件」或「生成链接」','warn');
-        }
-      };
-    }
-    /* 生成链接：优先上传临时存储返回真实 http 链接；失败则复制本地 data URL 兜底 */
+    /* 生成短链接：上传临时存储返回真实 http 短链接（不再复制超长 data URL） */
     var linkBtn=$('savePanelLink');
     if(linkBtn){
       linkBtn.onclick=function(){
@@ -3050,33 +3023,25 @@ function loop(){
         var xhr=new XMLHttpRequest();
         xhr.open('POST','https://litterbox.catbox.moe/resources/internals/api.php',true);
         xhr.timeout=180000;
-        var fallbackCopyLink=function(){
-          /* 上传失败回退：视频较小时复制 data URL 链接 */
-          if(dataUrl&&dataUrl.length<8*1024*1024){
-            var lb=$('savePanelLinkBox'),lt=$('savePanelLinkText');
-            if(lb)lb.classList.remove('hide');
-            if(lt)lt.value=dataUrl;
-            copyText(dataUrl);
-            toast('上传失败，已复制本地链接（视频较小可到浏览器粘贴）','warn');
-          }else{
-            toast('上传失败，请用「下载文件」或「浏览器打开」','warn');
-          }
+        var failUpload=function(msg){
+          linkBtn.disabled=false;linkBtn.textContent='生成短链接';
+          toast(msg||'生成链接失败，请用「下载文件」保存','warn');
         };
         xhr.onload=function(){
-          linkBtn.disabled=false;linkBtn.textContent='生成链接';
           var url=(xhr.responseText||'').trim();
           if(xhr.status>=200&&xhr.status<300&&/^https?:\/\//.test(url)){
+            linkBtn.disabled=false;linkBtn.textContent='生成短链接';
             var lb=$('savePanelLinkBox'),lt=$('savePanelLinkText');
             if(lb)lb.classList.remove('hide');
             if(lt)lt.value=url;
             copyText(url);
-            toast('链接已生成并复制，请到浏览器粘贴打开保存','good');
+            toast('短链接已生成并复制，请到浏览器粘贴打开保存','good');
           }else{
-            fallbackCopyLink();
+            failUpload();
           }
         };
-        xhr.onerror=function(){linkBtn.disabled=false;linkBtn.textContent='生成链接';fallbackCopyLink();};
-        xhr.ontimeout=function(){linkBtn.disabled=false;linkBtn.textContent='生成链接';toast('上传超时，请重试','warn');};
+        xhr.onerror=function(){failUpload('网络不可用，请用「下载文件」保存');};
+        xhr.ontimeout=function(){failUpload('上传超时，请用「下载文件」保存');};
         xhr.send(fd);
       };
     }
