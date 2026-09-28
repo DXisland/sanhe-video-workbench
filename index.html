@@ -335,6 +335,16 @@ body.no-nav .bottomnav{display:none}
   </div>
   <div class="scroller">
     <div class="homecards">
+      <div class="hcard" onclick="switchView('prep')">
+        <div class="hicon g1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M9.5 12l1.8 1.8L15 9.5"/></svg></div>
+        <div class="hcontent">
+          <h3>脚本生成</h3>
+          <p>一键生成带表演标注的口播/对话脚本</p>
+          <div class="hfeatures"><span>本地模板生成</span><span>草稿自动保存</span></div>
+        </div>
+        <span class="harrow">›</span>
+      </div>
+
       <div class="hcard" data-go="cam">
         <div class="hicon g2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6.5" width="13" height="11" rx="2"/><path d="M15.5 10.5l6-3v9l-6-3"/></svg></div>
         <div class="hcontent">
@@ -729,34 +739,41 @@ function switchView(name,push){
     teardownCam();
   }
   if(name==='edit')renderEdit();
-  if(name==='prep'){
-    // 确保在切换到 prep 视图时绑定所有所需事件监听器
-    // 避免依赖 initPrep() 单次加载的问题
+if(name==='prep'){
+    /* 草稿自动恢复 + 字段变化实时保存：每次导航到 prep 都执行，确保
+       1. localStorage 的草稿值填回输入框
+       2. 输入框变化即保存草稿，即使多次切换视图也不会丢 */
+    var FIELDS=['fProduct','fCity','fPrice','fGate','fValid','fDur','fCount','fDlg','fInd','fGoal'];
+    var draft=loadJSON('prep_draft_v3');
+    for(var i=0;i<FIELDS.length;i++){
+      (function(id){
+        var el=document.getElementById(id);
+        if(!el)return;
+        /* 恢复草稿值 */
+        if(draft&&draft[id])el.value=draft[id];
+        /* 绑定变化监听器（保存草稿） */
+        el.addEventListener('change',function(){prep.draft[id]=el.value;saveDraft()});
+      })(FIELDS[i]);
+    }
+    /* 更多按钮 */
     var b=document.getElementById('moreBox');
     var moreBtn=document.getElementById('moreBtn');
-    var prepBack=document.getElementById('prepBack');
-    var prepGo=document.getElementById('prepGo');
     if(moreBtn){
       moreBtn.onclick=function(){
         if(b){b.classList.toggle('open');this.textContent=b.classList.contains('open')?'收起更多设置 ▴':'展开更多设置 ▾';}
       };
     }
+    /* 返回按钮 */
+    var prepBack=document.getElementById('prepBack');
     if(prepBack){
       prepBack.onclick=function(){switchView('home')};
     }
+    /* 生成按钮 */
+    var prepGo=document.getElementById('prepGo');
     if(prepGo){
       prepGo.onclick=generate;
     }
-    // 绑定字段变化监听器
-var FIELDS=['fProduct','fCity','fPrice','fGate','fValid','fDur','fCount','fDlg','fInd','fGoal'];
-    for(var i=0;i<FIELDS.length;i++){
-      (function(id){
-        var el=document.getElementById(id);
-        if(!el)return;
-        el.addEventListener('change',function(){prep.draft[id]=el.value;saveDraft()});
-      })(FIELDS[i]);
-    }
-    // 绑定更多按钮文本初始状态
+    /* 绑定更多按钮文本初始状态 */
     if(moreBtn&&moreBox){
       moreBtn.textContent='展开更多设置 ▾';
     }
