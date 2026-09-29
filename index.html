@@ -684,7 +684,7 @@ var $=function(id){return document.getElementById(id)};
 var v=$('video'),ov=$('overlay'),octx=ov.getContext('2d');
 var isIOS=/iP(hone|ad|od)/.test(navigator.userAgent);
 /* 后端服务器地址：部署 server/server.js 后填入，例如 'https://video.example.com'（末尾不要带 /） */
-var SERVER_URL='';
+var SERVER_URL='http://43.142.44.57:3000';
 
 /* ==== ES5 兼容层（旧 Android WebView 兼容，避免整段脚本因 ES6 语法解析失败） ==== */
 if(!Array.prototype.find)Array.prototype.find=function(fn){for(var i=0;i<this.length;i++){if(fn(this[i],i,this))return this[i]}return undefined};
