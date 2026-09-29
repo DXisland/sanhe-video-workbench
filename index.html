@@ -3079,9 +3079,18 @@ function loop(){
       }else{fallbackCopy(t)}
     };
 
+    /* 微信/企业微信内 <a download> 会被 WebView 忽略并整页跳转到 blob，导致黑屏卡死页；
+       因此在微信环境一律改走「生成链接」引导，杜绝任何导航离开当前页 */
+    var guideLink=function(msg){
+      toast(msg,'warn');
+      var lb=$('savePanelLinkBox');
+      if(lb)lb.classList.remove('hide');
+    };
+
     var dl=$('savePanelDownload');
     if(dl){
       dl.onclick=function(){
+        if(isWx){guideLink('微信/企业微信内无法直接下载文件，请点「生成链接」，把链接发到聊天里点开即可保存');return;}
         /* 先 blob URL 下载，再 data URL 兜底下载 */
         doDownload(blobUrl);
         if(dataUrl){setTimeout(function(){doDownload(dataUrl)},800);}
@@ -3130,21 +3139,35 @@ function loop(){
       shareBtn.onclick=function(){
         if(!blob){toast('未检测到视频文件','warn');return;}
         var file=(blob instanceof File)?blob:new File([blob],fileName,{type:'video/mp4'});
-        if(navigator.share){
-          var ok=true;
-          if(navigator.canShare){try{ok=navigator.canShare({files:[file]})}catch(e){}}
-          if(!ok){
-            doDownload(blobUrl);toast('当前环境不支持分享文件，已改为下载','warn');return;
-          }
-          navigator.share({files:[file],title:'短视频成片',text:fileName})
-            .then(function(){toast('已发送，请在聊天中长按视频保存','good');})
-            .catch(function(e){
-              if(e&&e.name==='AbortError')return;
-              doDownload(blobUrl);toast('分享失败，已改为下载保存','warn');
-            });
-        }else{
-          doDownload(blobUrl);toast('当前环境不支持分享，已改为下载保存','warn');
+        /* 必须同时满足 share + canShare(files) 才调用，否则企业微信会把 files 丢掉或直接跳转卡死页 */
+        var canFileShare=false;
+        if(navigator.share&&navigator.canShare){
+          try{canFileShare=navigator.canShare({files:[file]})===true}catch(e){canFileShare=false}
         }
+        var fallback=function(msg){
+          if(isWx){guideLink(msg);}
+          else{doDownload(blobUrl);toast(msg+'，已改为下载保存','warn');}
+        };
+        if(!navigator.share||!canFileShare){
+          fallback('当前环境不支持发送文件');
+          return;
+        }
+        var p=null;
+        try{
+          p=navigator.share({files:[file],title:'短视频成片',text:fileName});
+        }catch(e){
+          fallback('分享调用失败（企业微信不支持直接发文件）');
+          return;
+        }
+        if(!p||!p.then){
+          fallback('分享调用失败（企业微信不支持直接发文件）');
+          return;
+        }
+        p.then(function(){toast('已发送，请在聊天中长按视频保存','good');})
+         .catch(function(e){
+           if(e&&e.name==='AbortError')return;
+           fallback('分享失败（企业微信不支持直接发文件）');
+         });
       };
     }
     var cl=$('savePanelClose');

@@ -27,7 +27,8 @@ const { URL } = require('url');
 
 const config = {
   port: parseInt(process.env.PORT || '3000', 10),
-  baseUrl: (process.env.BASE_URL || 'http://localhost:3000').replace(/\/+$/, ''),
+  baseUrl: (process.env.BASE_URL || '').replace(/\/+$/, ''),
+  hasBaseUrl: !!process.env.BASE_URL,
   dataDir: process.env.DATA_DIR || path.join(__dirname, 'data'),
   corsOrigin: process.env.CORS_ORIGIN || '*',
   corpId: process.env.WX_CORP_ID || '',
@@ -50,6 +51,14 @@ function sendJson(res, code, obj) {
   setCors(res);
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(body);
+}
+
+/* 对外地址：优先 BASE_URL，否则按请求 Host 动态推导（避免返回 localhost） */
+function publicBase(req) {
+  if (config.baseUrl) return config.baseUrl;
+  const host = (req.headers.host || '').trim();
+  if (host) return (req.headers['x-forwarded-proto'] || 'http') + '://' + host;
+  return 'http://localhost:' + config.port;
 }
 
 function extToType(ext) {
@@ -82,7 +91,7 @@ function handleUpload(req, res, query) {
 
   ws.on('finish', () => {
     if (aborted) return;
-    sendJson(res, 200, { ok: true, url: config.baseUrl + '/v/' + fileName, id });
+    sendJson(res, 200, { ok: true, url: publicBase(req) + '/v/' + fileName, id });
   });
   ws.on('error', (err) => {
     fs.unlink(filePath, () => {});
@@ -169,7 +178,7 @@ async function handleWxConfig(req, res, query) {
     sendJson(res, 400, { ok: false, error: '后端未配置企业微信应用（缺 WX_CORP_ID / WX_CORP_SECRET）' });
     return;
   }
-  const url = query.get('url') || config.baseUrl + '/';
+  const url = query.get('url') || publicBase(req) + '/';
   try {
     const ticket = await getJsapiTicket();
     const nonceStr = crypto.randomBytes(16).toString('hex');
@@ -224,6 +233,6 @@ const server = http.createServer((req, res) => {
 server.listen(config.port, () => {
   console.log('video-workbench-server 已启动：http://localhost:' + config.port);
   console.log('视频存储目录：' + videoDir);
-  console.log('对外地址：' + config.baseUrl);
+  console.log('对外地址：' + (config.baseUrl || '按请求 Host 动态推导'));
   console.log('企业微信应用已配置：' + (config.corpId && config.corpSecret ? '是' : '否（待填 WX_* ）'));
 });
