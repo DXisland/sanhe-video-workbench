@@ -563,13 +563,19 @@ body.no-nav .bottomnav{display:none}
         <button id="savePanelX" style="position:absolute;top:8px;right:10px;width:32px;height:32px;border:none;background:#f0f0f0;border-radius:50%;font-size:16px;line-height:1;color:#333;cursor:pointer">✕</button>
         <div style="font-size:16px;font-weight:800;color:#333;margin-bottom:10px;padding-right:28px">保存成片 <span style="font-size:12px;color:#999;font-weight:600">v3.0</span></div>
         <video id="savePanelVideo" controls playsinline webkit-playsinline x5-video-player-type="h5" x5-playsinline="true" style="width:100%;border-radius:10px;background:#000;max-height:34vh;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto;touch-action:manipulation"></video>
-        <p id="savePanelHint" style="font-size:13px;color:#666;margin:10px 0 6px;line-height:1.6">点「下载文件」保存到手机；或点「分享视频」直接发送到微信/企业微信保存</p>
+        <p id="savePanelHint" style="font-size:13px;color:#666;margin:10px 0 6px;line-height:1.6">点「生成链接」得到视频链接，复制后发到微信/企业微信即可保存</p>
         <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
           <button id="savePanelDownload" class="abtn primary" style="flex:1;min-width:110px">下载文件</button>
-          <button id="savePanelShare" class="abtn ghost" style="flex:1;min-width:110px">分享视频</button>
+          <button id="savePanelLink" class="abtn primary" style="flex:1;min-width:110px">生成链接</button>
         </div>
         <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
+          <button id="savePanelShare" class="abtn ghost" style="flex:1;min-width:110px">分享视频</button>
           <button id="savePanelClose" class="abtn ghost" style="flex:1;min-width:110px">关闭</button>
+        </div>
+        <div id="savePanelLinkBox" class="hide" style="margin-top:10px;text-align:left">
+          <div style="font-size:12px;color:#999;margin-bottom:4px">视频链接（复制后发到微信/企业微信，点开即可保存）：</div>
+          <textarea id="savePanelLinkText" readonly style="width:100%;height:44px;font-size:11px;color:#333;border:1px solid #e0e0e0;border-radius:8px;padding:6px;box-sizing:border-box;word-break:break-all"></textarea>
+          <button id="savePanelLinkCopy" class="abtn ghost" style="width:100%;margin-top:6px">复制链接</button>
         </div>
       </div>
     </div>
@@ -677,6 +683,8 @@ window.onerror=function(msg,src,line,col,err){
 var $=function(id){return document.getElementById(id)};
 var v=$('video'),ov=$('overlay'),octx=ov.getContext('2d');
 var isIOS=/iP(hone|ad|od)/.test(navigator.userAgent);
+/* 后端服务器地址：部署 server/server.js 后填入，例如 'https://video.example.com'（末尾不要带 /） */
+var SERVER_URL='';
 
 /* ==== ES5 兼容层（旧 Android WebView 兼容，避免整段脚本因 ES6 语法解析失败） ==== */
 if(!Array.prototype.find)Array.prototype.find=function(fn){for(var i=0;i<this.length;i++){if(fn(this[i],i,this))return this[i]}return undefined};
@@ -3035,9 +3043,9 @@ function loop(){
     var hintEl=$('savePanelHint');
     if(hintEl){
       if(isWx){
-        hintEl.textContent='已生成 MP4。点「分享视频」选择微信好友发送；若未弹出分享窗口，请点右上角…用系统浏览器打开本页后重试';
+        hintEl.textContent='企业微信内无法直接保存：点「生成链接」，复制链接发到聊天，点开即可保存';
       }else{
-        hintEl.textContent='点「分享视频」选择微信/好友直接发送；或「下载文件」保存到手机相册';
+        hintEl.textContent='点「生成链接」得到视频链接后复制发送；或「下载文件」直接保存';
       }
     }
 
@@ -3078,6 +3086,42 @@ function loop(){
         doDownload(blobUrl);
         if(dataUrl){setTimeout(function(){doDownload(dataUrl)},800);}
         toast('已尝试下载，请在下载列表/文件查看','good');
+      };
+    }
+    /* 生成链接：上传视频到后端，返回可访问的视频链接并自动复制 */
+    var linkBtn=$('savePanelLink');
+    if(linkBtn){
+      linkBtn.onclick=function(){
+        if(!SERVER_URL){toast('后端地址未配置（SERVER_URL 为空），请联系技术人员','warn');return;}
+        linkBtn.disabled=true;linkBtn.textContent='上传中...';
+        var xhr=new XMLHttpRequest();
+        xhr.open('POST',SERVER_URL+'/api/upload?ext=mp4',true);
+        xhr.setRequestHeader('Content-Type','application/octet-stream');
+        xhr.timeout=180000;
+        xhr.onload=function(){
+          linkBtn.disabled=false;linkBtn.textContent='生成链接';
+          var d=null;try{d=JSON.parse(xhr.responseText)}catch(e){}
+          if(d&&d.url){
+            var lb=$('savePanelLinkBox'),lt=$('savePanelLinkText');
+            if(lb)lb.classList.remove('hide');
+            if(lt)lt.value=d.url;
+            copyText(d.url);
+            toast('链接已生成并复制，粘贴到微信/企业微信发送即可','good');
+          }else{
+            toast('生成失败：'+(d&&d.error?d.error:'未知错误'),'warn');
+          }
+        };
+        xhr.onerror=function(){linkBtn.disabled=false;linkBtn.textContent='生成链接';toast('上传失败：网络错误','warn');};
+        xhr.ontimeout=function(){linkBtn.disabled=false;linkBtn.textContent='生成链接';toast('上传超时，请重试','warn');};
+        xhr.send(blob);
+      };
+    }
+    var linkCopyBtn=$('savePanelLinkCopy');
+    if(linkCopyBtn){
+      linkCopyBtn.onclick=function(){
+        var lt=$('savePanelLinkText');
+        if(lt&&lt.value){copyText(lt.value);toast('链接已复制','good');}
+        else{toast('请先生成链接','warn');}
       };
     }
     /* 分享视频：用真实 MP4 File 走系统分享，选择微信好友/群直接发送 */
