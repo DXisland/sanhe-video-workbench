@@ -2924,6 +2924,51 @@ function loop(){
   }
   $('editBack').addEventListener('click',function(){switchView('home')});
   $('editHomeBtn').addEventListener('click',function(){switchView('home')});
+  /* ---------- ffmpeg.wasm：WebM → MP4 转换（H.264+AAC，微信/企业微信可直接播放） ---------- */
+  var _ffmpegReady=null;
+  function ensureFFmpeg(){
+    if(_ffmpegReady)return _ffmpegReady;
+    _ffmpegReady=new Promise(function(resolve,reject){
+      if(window.FFmpeg){resolve(window.FFmpeg);return}
+      var s=document.createElement('script');
+      s.src='https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js';
+      s.onload=function(){resolve(window.FFmpeg)};
+      s.onerror=function(){reject(new Error('转换组件加载失败，请检查网络'))};
+      document.head.appendChild(s);
+    });
+    return _ffmpegReady;
+  }
+  function transcodeToMp4(blob,onProgress){
+    return ensureFFmpeg().then(function(FFmpeg){
+      return new Promise(function(resolve,reject){
+        var ffmpeg=FFmpeg.createFFmpeg({
+          corePath:'https://cdn.jsdelivr.net/npm/@ffmpeg/core-st@0.11.1/dist/ffmpeg-core.js',
+          mainName:'main',
+          log:false
+        });
+        if(onProgress){try{ffmpeg.setProgress(function(evt){if(evt&&typeof evt.ratio==='number')onProgress(Math.min(0.95,evt.ratio))})}catch(e){}}
+        var reader=new FileReader();
+        reader.onerror=function(){reject(new Error('读取视频失败'))};
+        reader.onload=function(){
+          var ab=reader.result;
+          ffmpeg.load().then(function(){
+            try{ffmpeg.FS('writeFile','in.webm',new Uint8Array(ab))}catch(e){reject(e);return}
+            return ffmpeg.run('-i','in.webm','-c:v','libx264','-preset','ultrafast','-crf','28','-vf','scale=trunc(iw/2)*2:trunc(ih/2)*2','-pix_fmt','yuv420p','-c:a','aac','-b:a','128k','-movflags','+faststart','out.mp4');
+          }).then(function(){
+            var data=ffmpeg.FS('readFile','out.mp4');
+            var mp4=new Blob([data],{type:'video/mp4'});
+            try{ffmpeg.exit()}catch(e){}
+            if(onProgress)onProgress(1);
+            resolve(mp4);
+          }).catch(function(e){
+            try{ffmpeg.exit()}catch(e2){}
+            reject(e);
+          });
+        };
+        reader.readAsArrayBuffer(blob);
+      });
+    });
+  }
   /* 合成视频按钮：可随时（非合成中）重新合成 */
   $('editSynthesizeBtn').addEventListener('click',function(){
     if(editState==='composing'){toast('正在合成中，请稍候','warn');return}
@@ -2936,15 +2981,43 @@ function loop(){
     var name='成片_'+new Date().toLocaleString('zh-CN',{hour12:false}).replace(/[/:\s]/g,'-');
     var blob=clip.finalBlob||clip.blob;
     if(blob){
-      var ext=(blob.type||'').indexOf('webm')>=0?'webm':'mp4';
-      var fileName=name+'.'+ext;
-      openSavePanel(blob,fileName);
+      var isMp4=(blob.type||'').indexOf('mp4')>=0;
+      if(isMp4){
+        openSavePanel(blob,name+'.mp4');
+        return;
+      }
+      /* WebM → MP4：转换期间用合成进度遮罩显示 */
+      var ov=$('editSynthOverlay'),stt=$('editSynthStatus'),bar=$('editSynthBar'),txt=$('editSynthText');
+      $('editSaveBtn').disabled=true;
+      if(ov)ov.classList.remove('hide');
+      if(stt)stt.classList.remove('hide');
+      if(bar)bar.style.width='2%';
+      if(txt)txt.textContent='正在转换为 MP4 格式（首次需下载转换组件，约20MB）...';
+      var prog=2,tick=setInterval(function(){if(prog<60)prog+=1;if(bar)bar.style.width=prog+'%'},300);
+      var clearProg=function(){if(tick)clearInterval(tick)};
+      transcodeToMp4(blob,function(p){
+        prog=Math.max(prog,Math.round(p*100));
+        if(bar)bar.style.width=prog+'%';
+      }).then(function(mp4){
+        clearProg();
+        if(bar)bar.style.width='100%';
+        if(ov)ov.classList.add('hide');
+        if(stt)stt.classList.add('hide');
+        $('editSaveBtn').disabled=false;
+        openSavePanel(mp4,name+'.mp4');
+      }).catch(function(e){
+        clearProg();
+        if(ov)ov.classList.add('hide');
+        if(stt)stt.classList.add('hide');
+        $('editSaveBtn').disabled=false;
+        toast('MP4 转换失败：'+(e&&e.message?e.message:e)+'，已退回原始文件','warn');
+        openSavePanel(blob,name+'.webm');
+      });
       return;
     }
     var url=clip.finalUrl||clip.url;
-    var ext2=(url.indexOf('.mp4')>=0)?'.mp4':'.webm';
     var a=document.createElement('a');a.href=url;
-    a.download=name+ext2;
+    a.download=name+'.mp4';
     a.click();toast('已开始保存成片','good');
   });
   /* 保存面板：显示成片视频，提供「下载文件 / 浏览器打开 / 生成链接」三种方式 */
@@ -2962,9 +3035,9 @@ function loop(){
     var hintEl=$('savePanelHint');
     if(hintEl){
       if(isWx){
-        hintEl.textContent='微信内无法保存视频：点「复制工具地址」，到手机浏览器打开后重新下载保存';
+        hintEl.textContent='已生成 MP4。点「分享视频」选择微信好友发送；若未弹出分享窗口，请点右上角…用系统浏览器打开本页后重试';
       }else{
-        hintEl.textContent='点「下载文件」直接保存到手机；若失败请「复制工具地址」到浏览器打开';
+        hintEl.textContent='点「分享视频」选择微信/好友直接发送；或「下载文件」保存到手机相册';
       }
     }
 
@@ -3007,17 +3080,26 @@ function loop(){
         toast('已尝试下载，请在下载列表/文件查看','good');
       };
     }
-    /* 分享视频：使用 Web Share API 将视频分享到微信/企业微信（现代浏览器支持），失败 fallback 到下载 */
+    /* 分享视频：用真实 MP4 File 走系统分享，选择微信好友/群直接发送 */
     var shareBtn=$('savePanelShare');
     if(shareBtn){
       shareBtn.onclick=function(){
         if(!blob){toast('未检测到视频文件','warn');return;}
+        var file=(blob instanceof File)?blob:new File([blob],fileName,{type:'video/mp4'});
         if(navigator.share){
-          navigator.share({files: [blob], title: '我的短视频'})
-            .then(function(){toast('分享成功，请在微信中查收并长按保存','good');})
-            .catch(function(){doDownload(blobUrl);toast('分享失败，已尝试下载保存','warn');});
+          var ok=true;
+          if(navigator.canShare){try{ok=navigator.canShare({files:[file]})}catch(e){}}
+          if(!ok){
+            doDownload(blobUrl);toast('当前环境不支持分享文件，已改为下载','warn');return;
+          }
+          navigator.share({files:[file],title:'短视频成片',text:fileName})
+            .then(function(){toast('已发送，请在聊天中长按视频保存','good');})
+            .catch(function(e){
+              if(e&&e.name==='AbortError')return;
+              doDownload(blobUrl);toast('分享失败，已改为下载保存','warn');
+            });
         }else{
-          doDownload(blobUrl);toast('当前浏览器不支持分享，直接下载保存','warn');
+          doDownload(blobUrl);toast('当前环境不支持分享，已改为下载保存','warn');
         }
       };
     }
