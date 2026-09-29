@@ -40,6 +40,17 @@ const config = {
 const videoDir = path.join(config.dataDir, 'v');
 fs.mkdirSync(videoDir, { recursive: true });
 
+/* 前端页面：由本服务直接托管，实现「页面 + 接口」同源，
+   避免 https 页面调用 http 接口被浏览器按混合内容拦截 */
+const frontendCandidates = [
+  process.env.FRONTEND_PATH || '',
+  path.join(__dirname, '..', 'index.html'),
+  path.join(__dirname, 'index.html'),
+  path.join(__dirname, 'public', 'index.html'),
+].filter(Boolean);
+const FRONTEND_FILE = frontendCandidates.find((f) => { try { return fs.statSync(f).isFile(); } catch (e) { return false; } }) || '';
+
+
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', config.corsOrigin);
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
@@ -227,6 +238,23 @@ const server = http.createServer((req, res) => {
     sendJson(res, 200, { ok: true, service: 'video-workbench-server' });
     return;
   }
+  /* 首页：直接托管前端页面（同源，无混合内容/CORS 问题） */
+  if ((req.method === 'GET' || req.method === 'HEAD') && (pathname === '/' || pathname === '/index.html')) {
+    if (!FRONTEND_FILE) {
+      sendJson(res, 500, { ok: false, error: '未找到前端页面文件（设置 FRONTEND_PATH）' });
+      return;
+    }
+    const html = fs.readFileSync(FRONTEND_FILE);
+    setCors(res);
+    res.writeHead(200, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Content-Length': html.length,
+      'Cache-Control': 'no-store',
+    });
+    if (req.method === 'HEAD') { res.end(); return; }
+    res.end(html);
+    return;
+  }
   sendJson(res, 404, { ok: false, error: 'Not Found' });
 });
 
@@ -235,4 +263,5 @@ server.listen(config.port, () => {
   console.log('视频存储目录：' + videoDir);
   console.log('对外地址：' + (config.baseUrl || '按请求 Host 动态推导'));
   console.log('企业微信应用已配置：' + (config.corpId && config.corpSecret ? '是' : '否（待填 WX_* ）'));
+  console.log('前端页面：' + (FRONTEND_FILE || '未找到（仅提供 API）'));
 });

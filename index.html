@@ -683,8 +683,17 @@ window.onerror=function(msg,src,line,col,err){
 var $=function(id){return document.getElementById(id)};
 var v=$('video'),ov=$('overlay'),octx=ov.getContext('2d');
 var isIOS=/iP(hone|ad|od)/.test(navigator.userAgent);
-/* 后端服务器地址：部署 server/server.js 后填入，例如 'https://video.example.com'（末尾不要带 /） */
+/* 后端服务器地址：部署 server/server.js 后填入，例如 'https://video.example.com'（末尾不要带 /）
+   若页面本身由该服务器托管（同源），则自动走相对路径，
+   避免 https 页面调用 http 接口被浏览器按「混合内容」拦截 */
 var SERVER_URL='http://43.142.44.57:3000';
+var SAME_ORIGIN=false;
+/* 若当前页面就部署在后端服务器上（同域名），自动改为相对路径，杜绝混合内容/CORS 问题 */
+if(/^https?:$/.test(location.protocol)&&SERVER_URL){
+  var SERVER_HOST=SERVER_URL.replace(/^https?:\/\//,'').split('/')[0].split(':')[0];
+  if(location.hostname===SERVER_HOST){SAME_ORIGIN=true;SERVER_URL='';}
+}
+var apiBase=function(){return SAME_ORIGIN?'':SERVER_URL};
 
 /* ==== ES5 兼容层（旧 Android WebView 兼容，避免整段脚本因 ES6 语法解析失败） ==== */
 if(!Array.prototype.find)Array.prototype.find=function(fn){for(var i=0;i<this.length;i++){if(fn(this[i],i,this))return this[i]}return undefined};
@@ -3100,29 +3109,56 @@ function loop(){
     /* 生成链接：上传视频到后端，返回可访问的视频链接并自动复制 */
     var linkBtn=$('savePanelLink');
     if(linkBtn){
+      /* 先探测后端连通性：把「连不上服务器」和「上传本身失败」区分开，便于定位 */
+      var probe=function(cb){
+        if(!SERVER_URL){cb(true);return;}
+        var p=new XMLHttpRequest();
+        p.open('GET',SERVER_URL+'/api/health',true);
+        p.timeout=8000;
+        p.onload=function(){cb(p.status===200)};
+        p.onerror=function(){cb(false)};
+        p.ontimeout=function(){cb(false)};
+        p.send();
+      };
+      var failMsg=function(xhr){
+        var reason='网络错误';
+        if(location.protocol==='https:'&&SERVER_URL&&SERVER_URL.indexOf('http://')===0){
+          reason='页面是HTTPS、后端是HTTP，被混合内容拦截（请改用 http://43.142.44.57:3000 打开本页）';
+        }else if(xhr&&xhr.status){
+          reason='服务器返回 HTTP '+xhr.status;
+        }else if(SERVER_URL){
+          reason='无法连接服务器 '+SERVER_URL+'（超时/被拦截）';
+        }
+        return reason;
+      };
+      var resetBtn=function(){linkBtn.disabled=false;linkBtn.textContent='生成链接';};
       linkBtn.onclick=function(){
-        if(!SERVER_URL){toast('后端地址未配置（SERVER_URL 为空），请联系技术人员','warn');return;}
-        linkBtn.disabled=true;linkBtn.textContent='上传中...';
-        var xhr=new XMLHttpRequest();
-        xhr.open('POST',SERVER_URL+'/api/upload?ext=mp4',true);
-        xhr.setRequestHeader('Content-Type','application/octet-stream');
-        xhr.timeout=180000;
-        xhr.onload=function(){
-          linkBtn.disabled=false;linkBtn.textContent='生成链接';
-          var d=null;try{d=JSON.parse(xhr.responseText)}catch(e){}
-          if(d&&d.url){
-            var lb=$('savePanelLinkBox'),lt=$('savePanelLinkText');
-            if(lb)lb.classList.remove('hide');
-            if(lt)lt.value=d.url;
-            copyText(d.url);
-            toast('链接已生成并复制，粘贴到微信/企业微信发送即可','good');
-          }else{
-            toast('生成失败：'+(d&&d.error?d.error:'未知错误'),'warn');
-          }
-        };
-        xhr.onerror=function(){linkBtn.disabled=false;linkBtn.textContent='生成链接';toast('上传失败：网络错误','warn');};
-        xhr.ontimeout=function(){linkBtn.disabled=false;linkBtn.textContent='生成链接';toast('上传超时，请重试','warn');};
-        xhr.send(blob);
+        if(!SERVER_URL&&!SAME_ORIGIN){toast('后端地址未配置（SERVER_URL 为空），请联系技术人员','warn');return;}
+        linkBtn.disabled=true;linkBtn.textContent='连接中...';
+        probe(function(ok){
+          if(!ok){resetBtn();toast('上传失败：'+failMsg(null),'warn');return;}
+          linkBtn.textContent='上传中...';
+          var xhr=new XMLHttpRequest();
+          xhr.open('POST',apiBase()+'/api/upload?ext=mp4',true);
+          xhr.setRequestHeader('Content-Type','application/octet-stream');
+          xhr.timeout=180000;
+          xhr.onload=function(){
+            resetBtn();
+            var d=null;try{d=JSON.parse(xhr.responseText)}catch(e){}
+            if(d&&d.url){
+              var lb=$('savePanelLinkBox'),lt=$('savePanelLinkText');
+              if(lb)lb.classList.remove('hide');
+              if(lt)lt.value=d.url;
+              copyText(d.url);
+              toast('链接已生成并复制，粘贴到微信/企业微信发送即可','good');
+            }else{
+              toast('生成失败：'+(d&&d.error?d.error:'未知错误'),'warn');
+            }
+          };
+          xhr.onerror=function(){resetBtn();toast('上传失败：'+failMsg(xhr),'warn');};
+          xhr.ontimeout=function(){resetBtn();toast('上传超时（视频过大或网络慢），请重试','warn');};
+          xhr.send(blob);
+        });
       };
     }
     var linkCopyBtn=$('savePanelLinkCopy');
