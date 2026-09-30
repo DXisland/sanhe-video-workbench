@@ -255,6 +255,29 @@ const server = http.createServer((req, res) => {
     res.end(html);
     return;
   }
+  /* ffmpeg.wasm 静态文件（同源加载，避免 jsDelivr 在国内极慢/被墙） */
+  if ((req.method === 'GET' || req.method === 'HEAD') && pathname.startsWith('/ffmpeg/')) {
+    const filePath = path.join(__dirname, 'ffmpeg', pathname.slice('/ffmpeg/'.length));
+    try {
+      const stat = fs.statSync(filePath);
+      if (!stat.isFile()) throw new Error('not file');
+      const ext = path.extname(filePath).toLowerCase();
+      const type = ext === '.wasm' ? 'application/wasm' : ext === '.js' ? 'application/javascript' : 'application/octet-stream';
+      const data = fs.readFileSync(filePath);
+      setCors(res);
+      res.writeHead(200, {
+        'Content-Type': type,
+        'Content-Length': data.length,
+        'Cache-Control': 'public, max-age=31536000',
+      });
+      if (req.method === 'HEAD') { res.end(); return; }
+      res.end(data);
+      return;
+    } catch (e) {
+      sendJson(res, 404, { ok: false, error: 'Not Found' });
+      return;
+    }
+  }
   sendJson(res, 404, { ok: false, error: 'Not Found' });
 });
 

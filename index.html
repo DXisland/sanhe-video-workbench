@@ -2943,12 +2943,13 @@ function loop(){
   $('editHomeBtn').addEventListener('click',function(){switchView('home')});
   /* ---------- ffmpeg.wasm：WebM → MP4 转换（H.264+AAC，微信/企业微信可直接播放） ---------- */
   var _ffmpegReady=null;
+  var FFMPEG_BASE=SAME_ORIGIN?'/ffmpeg':'https://cdn.jsdelivr.net/npm';
   function ensureFFmpeg(){
     if(_ffmpegReady)return _ffmpegReady;
     _ffmpegReady=new Promise(function(resolve,reject){
       if(window.FFmpeg){resolve(window.FFmpeg);return}
       var s=document.createElement('script');
-      s.src='https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js';
+      s.src=FFMPEG_BASE+'/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js';
       s.onload=function(){resolve(window.FFmpeg)};
       s.onerror=function(){reject(new Error('转换组件加载失败，请检查网络'))};
       document.head.appendChild(s);
@@ -2959,7 +2960,7 @@ function loop(){
     return ensureFFmpeg().then(function(FFmpeg){
       return new Promise(function(resolve,reject){
         var ffmpeg=FFmpeg.createFFmpeg({
-          corePath:'https://cdn.jsdelivr.net/npm/@ffmpeg/core-st@0.11.1/dist/ffmpeg-core.js',
+          corePath:FFMPEG_BASE+'/@ffmpeg/core-st@0.11.1/dist/ffmpeg-core.js',
           mainName:'main',
           log:false
         });
