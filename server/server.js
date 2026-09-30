@@ -13,7 +13,8 @@
  *   WX_AGENT_ID     企业微信自建应用「AgentId」  —— 拿到管理员权限后填写
  *
  * 接口：
- *   POST /api/upload?ext=mp4&name=  上传视频（body 为二进制），返回 { url }
+ *   POST /api/upload?ext=mp4&name=  上传视频（body 为二进制），返回 { url, file }
+ *   POST /api/compose              云端合成（JSON）：主视频+穿插素材+BGM+字幕 → ffmpeg → mp4
  *   GET  /v/:file        浏览器打开 → 保存页（预览+保存按钮）；播放器子请求 → 视频字节
  *   GET  /raw/:file      视频字节（供 <video> 使用，支持 Range）
  *   GET  /dl/:file       强制下载（Content-Disposition: attachment）
@@ -27,6 +28,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { URL } = require('url');
+const { spawn } = require('child_process');
 
 const config = {
   port: parseInt(process.env.PORT || '3000', 10),
@@ -116,7 +118,7 @@ function handleUpload(req, res, query) {
         fs.writeFileSync(filePath + '.name', original, 'utf8');
       } catch (e) { /* 忽略元数据写入失败 */ }
     }
-    sendJson(res, 200, { ok: true, url: publicBase(req) + '/v/' + fileName, id });
+    sendJson(res, 200, { ok: true, url: publicBase(req) + '/v/' + fileName, id, file: fileName });
   });
   ws.on('error', (err) => {
     fs.unlink(filePath, () => {});
@@ -259,6 +261,177 @@ a.btn.alt{background:#2b2f36}
 }
 
 
+/* ---------- 云端合成：主视频 + 穿插素材 + BGM + 字幕，用服务器 ffmpeg 完成 ---------- */
+
+/* 下载远程文件（COS 素材等）到本地临时文件，支持 http/https + 重定向 */
+function downloadTo(url, dest) {
+  return new Promise((resolve, reject) => {
+    const mod = /^https:/.test(url) ? https : http;
+    const req = mod.get(url, (r) => {
+      if (r.statusCode >= 300 && r.statusCode < 400 && r.headers.location) {
+        req.destroy();
+        downloadTo(new URL(r.headers.location, url).href, dest).then(resolve, reject);
+        return;
+      }
+      if (r.statusCode !== 200) {
+        req.destroy();
+        reject(new Error('下载素材失败 HTTP ' + r.statusCode));
+        return;
+      }
+      const ws = fs.createWriteStream(dest);
+      r.pipe(ws);
+      ws.on('finish', () => ws.close(() => resolve()));
+      ws.on('error', reject);
+    });
+    req.on('error', reject);
+    req.setTimeout(60000, () => { req.destroy(new Error('下载素材超时')); });
+  });
+}
+
+/* 运行 ffmpeg，返回 Promise */
+function runFfmpeg(args) {
+  return new Promise((resolve, reject) => {
+    const p = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    let err = '';
+    p.stderr.on('data', (d) => { err += d.toString(); if (err.length > 8000) err = err.slice(-8000); });
+    p.on('error', reject);
+    p.on('close', (code) => { code === 0 ? resolve() : reject(new Error(err || ('ffmpeg exit ' + code))); });
+  });
+}
+
+/* 生成 .ass 字幕文件（底部居中，白字/关键词金色，粗黑描边） */
+function assTime(t) {
+  t = Math.max(0, Number(t) || 0);
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = Math.floor(t % 60), cs = Math.round((t - Math.floor(t)) * 100);
+  return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0') + '.' + String(cs).padStart(2, '0');
+}
+const SUBTITLE_KEYWORDS = ['价格', '元', '折', '优惠', '活动', '限时', '现货', '包邮', '特价', '最低', '抢购', '秒杀', '直降', '立减', '促销', '折扣', '全场', '买', '送', '免费'];
+function buildAss(subs) {
+  let events = '';
+  for (const s of subs) {
+    const text = String(s.text || '').replace(/[{}]/g, '').replace(/,/g, '，').replace(/\\/g, '');
+    if (!text) continue;
+    let gold = false;
+    for (const k of SUBTITLE_KEYWORDS) { if (text.indexOf(k) >= 0) { gold = true; break; } }
+    const style = gold ? 'Gold' : 'Default';
+    events += 'Dialogue: 0,' + assTime(s.start) + ',' + assTime(s.end) + ',' + style + ',,0,0,0,,' + text + '\n';
+  }
+  return `[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Noto Sans CJK SC,86,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,6,0,2,0,0,153,1
+Style: Gold,Noto Sans CJK SC,86,&H0000D7FF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,6,0,2,0,0,153,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+` + events;
+}
+
+/* 读取请求 body（限制大小） */
+function readBody(req, maxBytes) {
+  return new Promise((resolve, reject) => {
+    let size = 0; const chunks = [];
+    req.on('data', (c) => { size += c.length; if (size > maxBytes) { reject(new Error('请求过大')); req.destroy(); return; } chunks.push(c); });
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('error', reject);
+  });
+}
+
+async function handleCompose(req, res) {
+  let input;
+  try { input = JSON.parse(await readBody(req, 4 * 1024 * 1024)); }
+  catch (e) { sendJson(res, 400, { ok: false, error: '请求解析失败' }); return; }
+
+  const mainFile = String(input.main || '').replace(/[^a-z0-9.]/gi, '');
+  const mainPath = path.join(videoDir, mainFile);
+  if (!mainFile || !fs.existsSync(mainPath)) { sendJson(res, 400, { ok: false, error: '主视频不存在，请重拍或重试' }); return; }
+
+  const tmpDir = path.join(config.dataDir, 'tmp', crypto.randomBytes(8).toString('hex'));
+  fs.mkdirSync(tmpDir, { recursive: true });
+
+  const ins = (Array.isArray(input.ins) ? input.ins : []).slice(0, 2);
+  const bgmUrl = String(input.bgm || '');
+  const subs = Array.isArray(input.subs) ? input.subs : [];
+  const mirrored = !!input.mirrored;
+  const name = String(input.name || '');
+
+  const args = ['-y', '-i', mainPath];
+  const insFiles = [];
+  for (let i = 0; i < ins.length; i++) {
+    const u = ins[i] && ins[i].url;
+    if (!u) continue;
+    try {
+      const dest = path.join(tmpDir, 'ins' + i + '.mp4');
+      await downloadTo(u, dest);
+      insFiles.push({ path: dest, start: parseFloat(ins[i].start) || 0, dur: parseFloat(ins[i].dur) || 2 });
+      args.push('-i', dest);
+    } catch (e) { /* 单个素材失败则跳过，不影响整体 */ }
+  }
+  let bgmPath = null;
+  if (bgmUrl) {
+    try {
+      bgmPath = path.join(tmpDir, 'bgm.mp3');
+      await downloadTo(bgmUrl, bgmPath);
+      args.push('-i', bgmPath);
+    } catch (e) { bgmPath = null; }
+  }
+
+  /* 视频滤镜：主视频 9:16 裁剪，镜像翻转，穿插素材整屏替换，字幕烧录 */
+  const fc = [];
+  let last = 'm0';
+  fc.push('[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1' + (mirrored ? ',hflip' : '') + '[m0]');
+  for (let i = 0; i < insFiles.length; i++) {
+    const inp = (i + 1) + ':v';
+    const st = insFiles[i].start, en = st + insFiles[i].dur;
+    fc.push('[' + inp + ']scale=1080:1920,setsar=1[i' + i + ']');
+    fc.push('[' + last + '][i' + i + ']overlay=0:0:enable=\'between(t,' + st.toFixed(3) + ',' + en.toFixed(3) + ')\':eof_action=pass[m' + (i + 1) + ']');
+    last = 'm' + (i + 1);
+  }
+  let vLabel = last;
+  if (subs.length) {
+    const assPath = path.join(tmpDir, 'subs.ass');
+    fs.writeFileSync(assPath, buildAss(subs), 'utf8');
+    fc.push('[' + last + ']subtitles=' + assPath + '[vout]');
+    vLabel = 'vout';
+  }
+
+  /* 音频：主视频音量增益 1.8；有 BGM 时混入（0.22） */
+  fc.push('[0:a]volume=1.8[a0]');
+  if (bgmPath) {
+    const aIdx = 1 + insFiles.length;
+    fc.push('[' + aIdx + ':a]volume=0.22[a1]');
+    fc.push('[a0][a1]amix=inputs=2:duration=first:dropout_transition=0[aout]');
+  } else {
+    fc.push('[a0]anull[aout]');
+  }
+
+  args.push('-filter_complex', fc.join(';'));
+  args.push('-map', '[' + vLabel + ']', '-map', '[aout]');
+  args.push('-c:v', 'libx264', '-crf', '20', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart');
+
+  const outId = crypto.randomBytes(8).toString('hex');
+  const outFile = outId + '.mp4';
+  const outPath = path.join(videoDir, outFile);
+  args.push(outPath);
+
+  try {
+    await runFfmpeg(args);
+    if (name) { try { fs.writeFileSync(outPath + '.name', name.slice(0, 80), 'utf8'); } catch (e) { /* 忽略 */ } }
+    sendJson(res, 200, { ok: true, url: publicBase(req) + '/v/' + outFile, id: outId });
+  } catch (e) {
+    try { fs.unlinkSync(outPath); } catch (_) { /* 忽略 */ }
+    sendJson(res, 500, { ok: false, error: '合成失败：' + (e.message || '').split('\n').pop() });
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) { /* 忽略 */ }
+  }
+}
+
+
 /* ---------- 企业微信 JS-SDK 签名 ---------- */
 let tokenCache = { token: '', expire: 0 };
 let ticketCache = { ticket: '', expire: 0 };
@@ -332,6 +505,10 @@ const server = http.createServer((req, res) => {
 
   if (req.method === 'POST' && pathname === '/api/upload') {
     handleUpload(req, res, query);
+    return;
+  }
+  if (req.method === 'POST' && pathname === '/api/compose') {
+    handleCompose(req, res);
     return;
   }
   if (pathname.startsWith('/v/')) {

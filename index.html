@@ -365,7 +365,7 @@ body.no-nav .bottomnav{display:none}
         <span class="harrow">›</span>
       </div>
     </div>
-    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br>板块①脚本为本地模板生成，可对接技能后端升级为 AI 生成<br><span style="color:var(--brand);font-weight:700">版本 v3.1 · 2026-09-30</span></div>
+    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br>板块①脚本为本地模板生成，可对接技能后端升级为 AI 生成<br><span style="color:var(--brand);font-weight:700">版本 v3.2 · 2026-09-30</span></div>
   </div>
 
   <!-- 底部导航：历史记录 / 门店短视频（当前） / 门店直播 -->
@@ -561,12 +561,12 @@ body.no-nav .bottomnav{display:none}
     <div id="savePanel" class="hide" style="position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:9990;display:flex;align-items:center;justify-content:center;padding:16px">
       <div style="background:#fff;border-radius:14px;padding:16px;width:94%;max-width:420px;max-height:88vh;overflow:auto;text-align:center;position:relative">
         <button id="savePanelX" style="position:absolute;top:8px;right:10px;width:32px;height:32px;border:none;background:#f0f0f0;border-radius:50%;font-size:16px;line-height:1;color:#333;cursor:pointer">✕</button>
-        <div style="font-size:16px;font-weight:800;color:#333;margin-bottom:10px;padding-right:28px">保存成片 <span style="font-size:12px;color:#999;font-weight:600">v3.1</span></div>
+        <div style="font-size:16px;font-weight:800;color:#333;margin-bottom:10px;padding-right:28px">保存成片 <span style="font-size:12px;color:#999;font-weight:600">v3.2</span></div>
         <video id="savePanelVideo" controls playsinline webkit-playsinline x5-video-player-type="h5" x5-playsinline="true" style="width:100%;border-radius:10px;background:#000;max-height:34vh;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto;touch-action:manipulation"></video>
         <p id="savePanelHint" style="font-size:13px;color:#666;margin:10px 0 6px;line-height:1.6">按下面三步，把视频保存到手机：</p>
         <div style="text-align:left;background:#f6f7f9;border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:12.5px;line-height:1.95;color:#444">
           <b style="color:#222">保存三步：</b><br>
-          ① 点<b>「保存视频」</b>，自动转成 MP4（首次需下载转换组件，之后很快）<br>
+          ① 点<b>「保存视频」</b>（成片已在云端转好 MP4）<br>
           ② 点<b>「生成链接」</b>，链接会自动复制<br>
           ③ 把链接粘贴到微信/企业微信，点开 → <b>「保存视频」</b>，文件在手机「文件管理 › 下载」里
         </div>
@@ -1106,6 +1106,11 @@ function fallbackCopy(t){
   try{document.execCommand('copy')}catch(e){}
   ta.remove();
 }
+function copyText(t){
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t).catch(function(){fallbackCopy(t)});
+  }else{fallbackCopy(t)}
+}
 
 /* ---------- Camera module ---------- */
 var lastWarn={},lowStart=null,lowLatch=false;
@@ -1437,7 +1442,7 @@ function onRecordStop(){
   S.chunks=[];
   if(blob.size<1024){toast('录像失败，请重试','bad');return}
   /* 记录是否为前置镜像：合成阶段需要统一翻回（保持输出与预览一致） */
-  LAST_SHOT.mirrored=!!S.flipH;
+  S.recMirrored=!!S.flipH;
   showSheet('video',blob);
   if(S.recMime.indexOf('webm')>=0)toast('当前为 WebM 格式，上传抖音前可能需要转成 MP4','warn');
 }
@@ -1471,7 +1476,7 @@ function showSheet(kind,blob){
   $('saveBtn').onclick=function(){saveBlob(blob,name)};
   $('retakeBtn').onclick=closeSheet;
   $('toEditBtn').onclick=function(){
-    LAST_SHOT={kind:kind,blob:blob,url:url,duration:(kind==='video'?S.recDur:0)||0};
+    LAST_SHOT={kind:kind,blob:blob,url:url,duration:(kind==='video'?S.recDur:0)||0,mirrored:(kind==='video'?!!S.recMirrored:false)};
     closeSheet();
     try{
       switchView('edit');
@@ -2228,27 +2233,27 @@ function startSynthesis(){
   $('editSynthOverlay').classList.remove('hide');
   $('editSynthStatus').classList.remove('hide');
   $('editSynthBar').style.width='0%';
-  $('editSynthText').textContent='正在合成成片... 0%';
+  $('editSynthText').textContent='正在上传并云端合成... 0%';
   var segs=window._shootSegments||[];
   var info=window._shootScriptInfo||{};
-  /* 合成超时保护：90 秒没完成则恢复按钮，避免永久卡在"合成中" */
+  /* 合成超时保护：5 分钟没完成则恢复按钮，避免永久卡在"合成中" */
   var synthTimeout=setTimeout(function(){
     if(editState==='composing'){
       $('editSynthOverlay').classList.add('hide');
       $('editSynthStatus').classList.add('hide');
       $('editSynthesizeBtn').disabled=false;
-      $('editSaveBtn').disabled=false;
+      $('editSaveBtn').disabled=true;
       editState='ready';
       $('editShotInfo').textContent='合成超时，请重试';
       toast('合成超时，请重试','warn');
     }
-  },90000);
+  },300000);
   var clearT=function(){if(synthTimeout)clearTimeout(synthTimeout)};
   try{
     composeFinalClip(LAST_SHOT,segs,info,EDIT_PLAN,function(prog){
       var pct=Math.round(prog*100);
       $('editSynthBar').style.width=pct+'%';
-      $('editSynthText').textContent='正在合成成片... '+pct+'%';
+      $('editSynthText').textContent='正在上传并云端合成... '+pct+'%';
     }).then(function(finalUrl){
       clearT();
       LAST_SHOT.finalUrl=finalUrl;
@@ -2265,18 +2270,18 @@ function startSynthesis(){
       $('editSynthOverlay').classList.add('hide');
       $('editSynthStatus').classList.add('hide');
       $('editSynthesizeBtn').disabled=false;
-      $('editSaveBtn').disabled=false;
-      editState='done';
-      $('editShotInfo').textContent='合成失败，将保存原始视频：'+(err.message||err);
-      toast('合成失败，保存原始视频','warn');
+      $('editSaveBtn').disabled=true;
+      editState='ready';
+      $('editShotInfo').textContent='合成失败，请重试：'+(err.message||err);
+      toast('合成失败，请重试','warn');
     });
   }catch(e){
     clearT();
     $('editSynthOverlay').classList.add('hide');
     $('editSynthStatus').classList.add('hide');
     $('editSynthesizeBtn').disabled=false;
-    $('editSaveBtn').disabled=false;
-    editState='done';
+    $('editSaveBtn').disabled=true;
+    editState='ready';
     $('editShotInfo').textContent='合成出错：'+(e.message||e);
     toast('合成出错，请重试','warn');
   }
@@ -2405,356 +2410,121 @@ function drawSubtitle(ctx,w,h,text){
 
 /* 主合成函数：返回 Promise(url) - iOS/Edge 兼容版 */
 /* 主合成函数：返回 Promise(url) - iOS 兼容重写版 */
+/* 上传二进制到后端，返回解析后的 JSON（含 url/file） */
+function uploadBinary(url, blob, onProgress, timeoutMs){
+  return new Promise(function(resolve,reject){
+    var xhr=new XMLHttpRequest();
+    xhr.open('POST',url,true);
+    xhr.setRequestHeader('Content-Type','application/octet-stream');
+    xhr.timeout=timeoutMs||600000;
+    if(onProgress&&xhr.upload){
+      xhr.upload.onprogress=function(e){if(e.lengthComputable&&e.total)onProgress(e.loaded/e.total)};
+    }
+    xhr.onload=function(){
+      var d=null;try{d=JSON.parse(xhr.responseText)}catch(e){}
+      if(d&&d.url)resolve(d);else reject(new Error((d&&d.error)||('上传失败 HTTP '+xhr.status)));
+    };
+    xhr.onerror=function(){reject(new Error('上传网络错误'))};
+    xhr.ontimeout=function(){reject(new Error('上传超时'))};
+    xhr.send(blob);
+  });
+}
+/* POST JSON 到后端，返回解析后的 JSON（含 url） */
+function postJson(url, body, timeoutMs){
+  return new Promise(function(resolve,reject){
+    var xhr=new XMLHttpRequest();
+    xhr.open('POST',url,true);
+    xhr.setRequestHeader('Content-Type','application/json');
+    xhr.timeout=timeoutMs||600000;
+    xhr.onload=function(){
+      var d=null;try{d=JSON.parse(xhr.responseText)}catch(e){}
+      if(d&&d.url)resolve(d);else reject(new Error((d&&d.error)||('合成失败 HTTP '+xhr.status)));
+    };
+    xhr.onerror=function(){reject(new Error('合成网络错误'))};
+    xhr.ontimeout=function(){reject(new Error('合成超时'))};
+    xhr.send(body);
+  });
+}
+/* 云端合成：上传主视频 + 素材/BGM 引用，交给服务器 ffmpeg 合成，返回 mp4 地址（Promise(url)） */
 function composeFinalClip(clip, segments, scriptInfo, plan, onProgress){
   return new Promise(function(resolve,reject){
     if(!clip||!clip.url){reject(new Error('no clip'));return;}
+    if(!clip.blob){reject(new Error('缺少录制视频数据'));return;}
     plan=plan||{inserts:[],bgm:null};
     var genSub=window._generatedSubtitles||[];
     var subtitleLines=(genSub.length?genSub:segments.map(function(s){return (s.line||'').trim();}).filter(function(l){return !!l;}));
-    var bigTitle='';/* 已移除视频上方标题（价格/手机型号），恒空不绘制 */
 
-    /* 主视频 */
-    var mainVideo=document.createElement('video');
-    mainVideo.src=clip.url;
-    mainVideo.playsInline=true;mainVideo.preload='auto';
-    mainVideo.setAttribute('playsinline','');
+    var D=parseFloat(clip.duration)||0;
+    if(!(D>0.5)){reject(new Error('视频时长未知'));return;}
 
-    /* 预解码主视频音轨：合成时用 AudioBufferSourceNode 稳定播放人声，
-       避免 iOS 上媒体元素音频被系统波动（渐弱消失再渐强） */
-    var decodedAudio=null;
-    var audioDecodeDone=!clip.blob;
-    if(clip.blob){
-      decodeVideoAudio(clip.blob,function(ab){
-        decodedAudio=ab;
-        if(!audioDecodeDone){
-          audioDecodeDone=true;
-          if(typeof maybeStart==='function')maybeStart();
+    /* 字幕时间轴（按字数比例均分 + VAD 校正首尾） */
+    function buildSubTimeline(duration){
+      var tl=[];
+      if(subtitleLines.length===0)return tl;
+      var totalChars=subtitleLines.reduce(function(s,l){return s+l.length;},0);
+      if(totalChars<=0)totalChars=subtitleLines.length;
+      var segs=window._speechSegments;
+      var startTime=0,endTime=duration;
+      if(segs&&segs.length>0){
+        startTime=Math.max(0,Math.min(segs[0].start,1.0));
+        endTime=segs[segs.length-1].end;
+        if(endTime<duration*0.6||endTime<=startTime)endTime=duration;
+        if(startTime>=endTime-0.5)startTime=0;
+      }
+      var subTotal=Math.max(0.5,endTime-startTime);
+      var accTime=startTime;
+      for(var si=0;si<subtitleLines.length;si++){
+        var line=subtitleLines[si];
+        var segDur=subTotal*line.length/totalChars;
+        var pieces=chunkSmart(line,10);
+        var accT=accTime;
+        for(var pi=0;pi<pieces.length;pi++){
+          var pd=segDur*pieces[pi].length/(line.length||1);
+          tl.push({text:pieces[pi],start:accT,end:accT+pd});
+          accT+=pd;
         }
-      });
-      /* 解码兜底：10秒没完成就放弃，回退媒体元素音频 */
-      setTimeout(function(){
-        if(!audioDecodeDone){audioDecodeDone=true;decodedAudio=null;if(typeof maybeStart==='function')maybeStart();}
-      },10000);
+        accTime+=segDur;
+      }
+      return tl;
     }
+    var subs=buildSubTimeline(D);
 
-    /* 穿插素材：muted（只出画面，绝不发声、绝不抢音频焦点） */
+    /* 穿插素材：固定第4秒、第9秒，时长2-3秒（与旧版一致） */
     var insertDefs=(plan.inserts||[]).map(function(id){
       return MATERIAL_LIB.items.video.find(function(v){return v.id===id});
     }).filter(Boolean).slice(0,2);
-    var insertEls=insertDefs.map(function(d){
-      var v=document.createElement('video');
-      v.src=d.url;v.playsInline=true;v.preload='auto';
-      v.muted=true;
-      v.setAttribute('playsinline','');
-      if(/^https?:/.test(d.url))v.crossOrigin='anonymous';
-      v._dead=false;
-      return v;
-    });
+    var dl1=2000+Math.floor(Math.random()*1000);
+    var dl2=2000+Math.floor(Math.random()*1000);
+    var ins=[];
+    if(insertDefs[0])ins.push({url:insertDefs[0].url,start:4,dur:dl1/1000});
+    if(insertDefs[1])ins.push({url:insertDefs[1].url,start:9,dur:dl2/1000});
 
-    /* 预载 BGM */
-    var bgmEl=null;
+    var bgmUrl='';
     if(plan.bgm){
       var bgmDef=MATERIAL_LIB.items.audio.find(function(a){return a.id===plan.bgm});
-      if(bgmDef){
-        bgmEl=new Audio();
-        bgmEl.src=bgmDef.url;
-        bgmEl.loop=true;
-        bgmEl.preload='auto';
-        if(/^https?:/.test(bgmDef.url))bgmEl.crossOrigin='anonymous';
-        bgmEl._dead=false;
-      }
+      if(bgmDef)bgmUrl=bgmDef.url;
     }
 
-    var finished=false,startTime=0,progressTimer=null,forceStopTimer=null,matCheckTimer=null;
-
-    function reportProgress(p){
-      if(!finished&&onProgress)onProgress(Math.min(1,p));
-    }
-
-function buildSubTimeline(duration){
-  var tl=[];
-  if(subtitleLines.length===0)return tl;
-  var totalChars=subtitleLines.reduce(function(s,l){return s+l.length;},0);
-  if(totalChars<=0)totalChars=subtitleLines.length;
-  var segs=window._speechSegments;
-  /* 字幕均匀分布（按字数比例），彻底避免时快时慢 */
-  var startTime=0,endTime=duration;
-  if(segs&&segs.length>0){
-    /* VAD 只用于校正首尾：从第一段语音开始，到最后一段语音结束 */
-    startTime=Math.max(0,Math.min(segs[0].start,1.0));
-    endTime=segs[segs.length-1].end;
-    /* 保护：VAD 检测异常（尾太早/首尾错乱）则回退到整段视频 */
-    if(endTime<duration*0.6||endTime<=startTime)endTime=duration;
-    if(startTime>=endTime-0.5)startTime=0;
-  }
-  var subTotal=Math.max(0.5,endTime-startTime);
-  var accTime=startTime;
-  for(var si=0;si<subtitleLines.length;si++){
-    var line=subtitleLines[si];
-    var segDur=subTotal*line.length/totalChars;
-    var pieces=chunkSmart(line,10);
-    var accT=accTime;
-    for(var pi=0;pi<pieces.length;pi++){
-      var pd=segDur*pieces[pi].length/(line.length||1);
-      tl.push({text:pieces[pi],start:accT,end:accT+pd});
-      accT+=pd;
-    }
-    accTime+=segDur;
-  }
-  return tl;
-}
-
-    function startCompose(){
-      var vw=mainVideo.videoWidth||640,vh=mainVideo.videoHeight||480;
-      var D=mainVideo.duration;
-      var recDur=parseFloat(clip.duration)||0;
-      /* 优先用录制时长（墙钟，可靠）：MediaRecorder 录制的 webm 其 video.duration
-         常为 Infinity 或偏小，导致合成提前结束、丢失末尾几秒 */
-      if(recDur>0.5)D=recDur;
-      else if(!D||!isFinite(D)||D<=0)D=10;
-
-      /* 可用素材：加载失败的剔除；只有一个素材时两个插入点复用同一个 */
-      var usable=[];
-      for(var i=0;i<insertEls.length;i++){if(!insertEls[i]._dead)usable.push(insertEls[i])}
-      var ins1=usable[0]||null;
-      var ins2=usable[1]||usable[0]||null;
-
-      /* 固定插入点：第4秒、第9秒，时长严格2-3秒 */
-      var dl1=2000+Math.floor(Math.random()*1000);
-      var dl2=2000+Math.floor(Math.random()*1000);
-      var INS1_S=4,INS1_E=INS1_S+dl1/1000;
-      var INS2_S=9,INS2_E=INS2_S+dl2/1000;
-
-      /* 总时长=原始视频时长；主视频从头自然播放，音频贯穿始终不中断 */
-      var total=D;
-      var subTimeline=buildSubTimeline(total);
-
-      /* 输出分辨率：固定 9:16（1080x1920 上限），等比裁剪源画面，
-         只做等比裁剪/降采样，绝不放大，保证成片是真 1080p、不发糊 */
-      var scale=Math.min(1,1920/Math.max(vw,vh));
-      var cw=Math.max(2,Math.round(vw*scale)),ch=Math.max(2,Math.round(vh*scale));
-      /* 强制 9:16，只做裁剪/降采样，绝不放大 */
-      var ar=9/16;
-      var tw=Math.min(1080,cw,Math.floor(ch*ar));
-      var th=Math.round(tw/ar);
-      if(th>1920){th=1920;tw=Math.round(th*ar);}
-      tw=tw-(tw%2);th=th-(th%2);
-      cw=tw;ch=th;
-      var canvas=document.createElement('canvas');canvas.width=cw;canvas.height=ch;
-      var ctx=canvas.getContext('2d');
-      /* 不再使用 high 平滑，降低 CPU 占用；等比缩放下默认平滑即锐利 */
-      ctx.imageSmoothingEnabled=true;
-      var stream=null;
-      try{stream=canvas.captureStream(30)}catch(e){stream=null}
-      if(!stream||!stream.getVideoTracks||!stream.getVideoTracks().length){
-        reject(new Error('当前浏览器不支持画面合成'));
-        return;
-      }
-
-      /* 音频：主视频人声 + BGM 同时进录制流和扬声器 */
-      var audioCtx=null,audioDest=null,audioSrcNode=null;
-      try{
-        audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-        audioDest=audioCtx.createMediaStreamDestination();
-        var mainOut=audioCtx.createGain();mainOut.gain.value=1.8;
-        if(decodedAudio){
-          /* 用解码后的 AudioBuffer 稳定播放人声：音量恒定，不受 iOS 媒体元素音频波动影响 */
-          audioSrcNode=audioCtx.createBufferSource();
-          audioSrcNode.buffer=decodedAudio;
-          audioSrcNode.connect(mainOut);
-          mainVideo.muted=true;
-        }else{
-          var mainSrc=audioCtx.createMediaElementSource(mainVideo);
-          mainSrc.connect(mainOut);
-        }
-        mainOut.connect(audioDest);
-        mainOut.connect(audioCtx.destination);
-        if(bgmEl&&!bgmEl._dead){
-          var bgmSrc=audioCtx.createMediaElementSource(bgmEl);
-          var bgmGain=audioCtx.createGain();bgmGain.gain.value=0.22;
-          bgmSrc.connect(bgmGain);
-          bgmGain.connect(audioDest);
-          bgmGain.connect(audioCtx.destination);
-        }
-        var at=audioDest.stream.getAudioTracks();
-        for(var ai=0;ai<at.length;ai++)stream.addTrack(at[ai]);
-        /* iOS 可能挂起 AudioContext，自动恢复 */
-        audioCtx.addEventListener('statechange',function(){
-          if(!finished&&audioCtx&&audioCtx.state==='suspended'){audioCtx.resume().catch(function(){})}
-        });
-      }catch(e){audioCtx=null;audioDest=null;audioSrcNode=null;}
-
-      var mimeType=['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/webm;codecs=vp8,opus','video/webm;codecs=vp9,opus','video/webm'].find(function(t){
-        try{return MediaRecorder.isTypeSupported(t)}catch(e){return false}
-      })||'';
-      var recorder;
-      try{
-        var opts=mimeType?{mimeType:mimeType}:{};
-        try{opts.videoBitsPerSecond=12e6}catch(e){}
-        recorder=new MediaRecorder(stream,opts);
-      }catch(e){recorder=new MediaRecorder(stream);}
-      var chunks=[];recorder.ondataavailable=function(e){if(e.data&&e.data.size>0)chunks.push(e.data);};
-      recorder.onstop=function(){
-        if(progressTimer)clearInterval(progressTimer);
-        if(forceStopTimer)clearTimeout(forceStopTimer);
-        if(matCheckTimer)clearInterval(matCheckTimer);
-        if(audioSrcNode){try{audioSrcNode.stop()}catch(e){}}
-        if(bgmEl&&!bgmEl._dead){try{bgmEl.pause();bgmEl._dead=true}catch(e){}}
-        try{mainVideo.pause()}catch(e){}
-        if(audioCtx&&audioCtx.state!=='closed'){try{audioCtx.close()}catch(e){}}
-        var blob=new Blob(chunks,{type:(chunks[0]&&chunks[0].type)||mimeType||'video/webm'});
-        var url=URL.createObjectURL(blob);
-        if(LAST_SHOT)LAST_SHOT.finalBlob=blob;
-        resolve(url);
-      };
-
-      /* 文字图层预渲染缓存：标题/字幕各渲染一次，之后每帧直接贴图 */
-      var titleLayer=null;
-      function getTitleLayer(){
-        if(!bigTitle)return null;
-        if(titleLayer)return titleLayer;
-        var c=document.createElement('canvas');c.width=cw;c.height=ch;
-        drawTitle(c.getContext('2d'),cw,ch,bigTitle);
-        titleLayer=c;return c;
-      }
-      var subLayer=null,subLayerText='';
-      function getSubLayer(text){
-        if(!text)return null;
-        if(subLayer&&subLayerText===text)return subLayer;
-        var c=document.createElement('canvas');c.width=cw;c.height=ch;
-        drawSubtitle(c.getContext('2d'),cw,ch,text);
-        subLayer=c;subLayerText=text;
-        return c;
-      }
-      setTimeout(function(){getTitleLayer()},50);
-
-      /* 绘制主视频：若为前置镜像则水平翻回（保持输出与预览一致） */
-      function drawMain(c){
-        if(LAST_SHOT&&LAST_SHOT.mirrored){
-          c.save();
-          c.translate(cw,0);
-          c.scale(-1,1);
-          c.drawImage(mainVideo,0,0,cw,ch);
-          c.restore();
-        }else{
-          c.drawImage(mainVideo,0,0,cw,ch);
-        }
-      }
-
-      function finishNow(){
-        if(finished)return;
-        finished=true;
-        if(progressTimer)clearInterval(progressTimer);
-        if(forceStopTimer)clearTimeout(forceStopTimer);
-        if(matCheckTimer)clearInterval(matCheckTimer);
-        if(recorder.state==='recording')recorder.stop();
-        reportProgress(1);
-      }
-
-      var compStart=performance.now();
-      function drawFrame(now){
-        if(finished)return;
-        /* 进度完全由主视频播放进度驱动，不用墙钟，保证成片完整 */
-        var mt=mainVideo.currentTime;
-        if(!isFinite(mt)||mt<0)mt=(now-compStart)/1000;
-        if(mainVideo.ended||mt>=total+0.5){
-          try{drawMain(ctx)}catch(e){}
-          finishNow();
-          return;
-        }
-        /* 主视频持续播放，音频贯穿始终 */
-        if(mainVideo.paused){mainVideo.play().catch(function(){})}
-        var iv=null;
-        if(ins1&&mt>=INS1_S&&mt<INS1_E)iv=ins1;
-        else if(ins2&&mt>=INS2_S&&mt<INS2_E)iv=ins2;
-        if(iv&&iv.readyState>=2){
-          if(iv.paused){iv.play().catch(function(){})}
-          try{ctx.drawImage(iv,0,0,cw,ch)}catch(e){try{drawMain(ctx)}catch(e){}}
-        }else{
-          try{drawMain(ctx)}catch(e){}
-        }
-        var tl=getTitleLayer();
-        if(tl)ctx.drawImage(tl,0,0);
-        var cur='';
-        for(var ti=0;ti<subTimeline.length;ti++){
-          if(mt>=subTimeline[ti].start&&mt<subTimeline[ti].end){cur=subTimeline[ti].text;break;}
-        }
-        /* 兜底：如果当前时间已超出所有字幕区间，显示最后一条 */
-        if(!cur&&subTimeline.length>0&&mt>=subTimeline[subTimeline.length-1].end){
-          cur=subTimeline[subTimeline.length-1].text;
-        }
-        var sl=getSubLayer(cur);
-        if(sl)ctx.drawImage(sl,0,0);
-        reportProgress(mt/total);
-        requestAnimationFrame(drawFrame);
-      }
-
-      /* 低频检查：素材离开插入区间立即暂停（不做每帧 pause，避免卡顿） */
-      matCheckTimer=setInterval(function(){
-        if(finished)return;
-        var mt=mainVideo.currentTime;
-        [ins1,ins2].forEach(function(v){
-          if(!v||v.paused)return;
-          var in1=(ins1===v&&mt>=INS1_S&&mt<INS1_E);
-          var in2=(ins2===v&&mt>=INS2_S&&mt<INS2_E);
-          if(!in1&&!in2){v.pause()}
-        });
-      },100);
-
-      recorder.start(250);
-      startTime=Date.now();
-      /* 进度上报：基于主视频播放时间 */
-      progressTimer=setInterval(function(){
-        if(finished)return;
-        var mt=mainVideo.currentTime;
-        if(isFinite(mt)&&mt>0)reportProgress(mt/total);
-      },300);
-      /* 兜底：主视频彻底卡死才强制结束（正常情况下主视频播完触发 finishNow） */
-      forceStopTimer=setTimeout(finishNow,(total+20)*1000);
-
-      var playStarted=false;
-      var playFunc=function(){
-        if(playStarted)return;
-        playStarted=true;
-        mainVideo.play().catch(function(){});
-        if(audioSrcNode){try{audioSrcNode.start(0)}catch(e){}}
-        if(bgmEl&&!bgmEl._dead){bgmEl.play().catch(function(){})}
-        reportProgress(0);
-        requestAnimationFrame(drawFrame);
-      };
-      if(audioCtx&&audioCtx.state==='suspended'){
-        /* 1.5秒兜底：resume 挂起也强制开始，绝不让合成卡在0% */
-        var resumeFallback=setTimeout(function(){playFunc();},1500);
-        audioCtx.resume().then(function(){clearTimeout(resumeFallback);playFunc();}).catch(function(){clearTimeout(resumeFallback);playFunc();});
-      }else{playFunc();}
-    }
-
-    /* 加载协调：主视频 + 素材 + BGM + 音轨解码 全部就绪（或失败）后开始 */
-    var pending=1+insertEls.length+(bgmEl?1:0)+(audioDecodeDone?0:1);
-    var loadStarted=false;
-    function maybeStart(){
-      pending--;
-      if(pending<=0&&!loadStarted){
-        loadStarted=true;
-        setTimeout(startCompose,60);
-      }
-    }
-    mainVideo.onloadeddata=maybeStart;
-    mainVideo.onerror=function(){reject(new Error('主视频加载失败'));};
-    insertEls.forEach(function(iv){
-      iv.onloadeddata=maybeStart;
-      iv.onerror=function(){iv._dead=true;maybeStart()};
+    var name='成片_'+new Date().toLocaleString('zh-CN',{hour12:false}).replace(/[/:\s]/g,'-');
+    var ext=(clip.blob.type||'').indexOf('mp4')>=0?'mp4':'webm';
+    var progress=0;
+    var tick=null;
+    uploadBinary(apiBase()+'/api/upload?ext='+ext+'&name='+encodeURIComponent(name+'.'+ext), clip.blob, function(p){
+      progress=Math.max(progress,p*0.5);
+      if(onProgress)onProgress(progress);
+    }).then(function(up){
+      tick=setInterval(function(){ if(progress<0.92){progress=Math.min(0.92,progress+0.02); if(onProgress)onProgress(progress);} },1000);
+      return postJson(apiBase()+'/api/compose', JSON.stringify({
+        main:up.file||up.id, ins:ins, bgm:bgmUrl, subs:subs, mirrored:!!clip.mirrored, name:name+'.mp4'
+      }));
+    }).then(function(cr){
+      if(tick)clearInterval(tick);
+      if(onProgress)onProgress(1);
+      resolve(cr.url);
+    }).catch(function(e){
+      if(tick)clearInterval(tick);
+      reject(e);
     });
-    if(bgmEl){
-      bgmEl.oncanplay=maybeStart;
-      bgmEl.onerror=function(){bgmEl._dead=true;maybeStart()};
-    }
-    var loadFallback=setTimeout(function(){
-      if(!loadStarted){
-        loadStarted=true;
-        startCompose();
-      }
-    },6000);
   });
 }
 
@@ -2982,52 +2752,6 @@ function loop(){
   }
   $('editBack').addEventListener('click',function(){switchView('home')});
   $('editHomeBtn').addEventListener('click',function(){switchView('home')});
-  /* ---------- ffmpeg.wasm：WebM → MP4 转换（H.264+AAC，微信/企业微信可直接播放） ---------- */
-  var _ffmpegReady=null;
-  var FFMPEG_BASE=SAME_ORIGIN?'/ffmpeg':'https://cdn.jsdelivr.net/npm';
-  function ensureFFmpeg(){
-    if(_ffmpegReady)return _ffmpegReady;
-    _ffmpegReady=new Promise(function(resolve,reject){
-      if(window.FFmpeg){resolve(window.FFmpeg);return}
-      var s=document.createElement('script');
-      s.src=FFMPEG_BASE+'/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js';
-      s.onload=function(){resolve(window.FFmpeg)};
-      s.onerror=function(){reject(new Error('转换组件加载失败，请检查网络'))};
-      document.head.appendChild(s);
-    });
-    return _ffmpegReady;
-  }
-  function transcodeToMp4(blob,onProgress){
-    return ensureFFmpeg().then(function(FFmpeg){
-      return new Promise(function(resolve,reject){
-        var ffmpeg=FFmpeg.createFFmpeg({
-          corePath:FFMPEG_BASE+'/@ffmpeg/core-st@0.11.1/dist/ffmpeg-core.js',
-          mainName:'main',
-          log:false
-        });
-        if(onProgress){try{ffmpeg.setProgress(function(evt){if(evt&&typeof evt.ratio==='number')onProgress(Math.min(0.95,evt.ratio))})}catch(e){}}
-        var reader=new FileReader();
-        reader.onerror=function(){reject(new Error('读取视频失败'))};
-        reader.onload=function(){
-          var ab=reader.result;
-          ffmpeg.load().then(function(){
-            try{ffmpeg.FS('writeFile','in.webm',new Uint8Array(ab))}catch(e){reject(e);return}
-            return ffmpeg.run('-i','in.webm','-c:v','libx264','-preset','ultrafast','-crf','19','-vf','scale=trunc(iw/2)*2:trunc(ih/2)*2','-pix_fmt','yuv420p','-c:a','aac','-b:a','192k','-movflags','+faststart','out.mp4');
-          }).then(function(){
-            var data=ffmpeg.FS('readFile','out.mp4');
-            var mp4=new Blob([data],{type:'video/mp4'});
-            try{ffmpeg.exit()}catch(e){}
-            if(onProgress)onProgress(1);
-            resolve(mp4);
-          }).catch(function(e){
-            try{ffmpeg.exit()}catch(e2){}
-            reject(e);
-          });
-        };
-        reader.readAsArrayBuffer(blob);
-      });
-    });
-  }
   /* 合成视频按钮：可随时（非合成中）重新合成 */
   $('editSynthesizeBtn').addEventListener('click',function(){
     if(editState==='composing'){toast('正在合成中，请稍候','warn');return}
@@ -3038,223 +2762,86 @@ function loop(){
     var clip=LAST_SHOT;if(!clip)return;
     if(editState!=='done'){toast('请先合成视频','warn');return}
     var name='成片_'+new Date().toLocaleString('zh-CN',{hour12:false}).replace(/[/:\s]/g,'-');
-    var blob=clip.finalBlob||clip.blob;
-    if(blob){
-      var isMp4=(blob.type||'').indexOf('mp4')>=0;
-      if(isMp4){
-        openSavePanel(blob,name+'.mp4');
-        return;
-      }
-      /* WebM → MP4：转换期间用合成进度遮罩显示 */
-      var ov=$('editSynthOverlay'),stt=$('editSynthStatus'),bar=$('editSynthBar'),txt=$('editSynthText');
-      $('editSaveBtn').disabled=true;
-      if(ov)ov.classList.remove('hide');
-      if(stt)stt.classList.remove('hide');
-      if(bar)bar.style.width='2%';
-      if(txt)txt.textContent='正在转换为 MP4 格式（首次需下载转换组件，约20MB）...';
-      var prog=2,tick=setInterval(function(){if(prog<60)prog+=1;if(bar)bar.style.width=prog+'%'},300);
-      var clearProg=function(){if(tick)clearInterval(tick)};
-      transcodeToMp4(blob,function(p){
-        prog=Math.max(prog,Math.round(p*100));
-        if(bar)bar.style.width=prog+'%';
-      }).then(function(mp4){
-        clearProg();
-        if(bar)bar.style.width='100%';
-        if(ov)ov.classList.add('hide');
-        if(stt)stt.classList.add('hide');
-        $('editSaveBtn').disabled=false;
-        openSavePanel(mp4,name+'.mp4');
-      }).catch(function(e){
-        clearProg();
-        if(ov)ov.classList.add('hide');
-        if(stt)stt.classList.add('hide');
-        $('editSaveBtn').disabled=false;
-        toast('MP4 转换失败：'+(e&&e.message?e.message:e)+'，已退回原始文件','warn');
-        openSavePanel(blob,name+'.webm');
-      });
+    /* 照片：直接下载到本地 */
+    if(clip.kind==='photo'){
+      var a=document.createElement('a');a.href=clip.url;
+      a.download=name+'.jpg';a.click();toast('已开始保存照片','good');
       return;
     }
-    var url=clip.finalUrl||clip.url;
-    var a=document.createElement('a');a.href=url;
-    a.download=name+'.mp4';
-    a.click();toast('已开始保存成片','good');
+    /* 成片已在云端合成为 MP4（finalUrl 为服务器地址），直接打开保存面板 */
+    var url=clip.finalUrl;
+    if(url&&/^https?:/.test(url)){
+      openSavePanel(url,name+'.mp4');
+      return;
+    }
+    toast('尚未合成，请先点「合成视频」','warn');
   });
   /* 保存面板：显示成片视频，提供「下载文件 / 浏览器打开 / 生成链接」三种方式 */
-  function openSavePanel(blob,fileName){
-    var blobUrl=URL.createObjectURL(blob);
-    var dataUrl=null;
+  function openSavePanel(videoUrl,fileName){
     var sv=$('savePanelVideo');
-    if(sv){sv.src=blobUrl;}
+    if(sv){sv.src=videoUrl;}
     var panel=$('savePanel');
     if(panel)panel.classList.remove('hide');
     var linkBox=$('savePanelLinkBox');
     if(linkBox)linkBox.classList.add('hide');
-    /* 环境检测：微信/企业微信内保存受限，提示改用系统浏览器 */
     var isWx=/micromessenger|wxwork/i.test(navigator.userAgent);
     var hintEl=$('savePanelHint');
     if(hintEl){
-      if(isWx){
-        hintEl.textContent='你在微信/企业微信内：无法直接下载，请按下面三步用「生成链接」：';
-      }else{
-        hintEl.textContent='按下面三步，把视频保存到手机：';
-      }
+      hintEl.textContent=isWx?'你在微信/企业微信内：无法直接下载，请按下面三步用「生成链接」：':'按下面三步，把视频保存到手机：';
     }
 
-    /* 预生成 base64 data URL：仅小视频(<15MB)用于下载兜底，避免大视频生成超大 base64 卡内存 */
-    if(blob.size<15*1024*1024){
-      try{
-        var fr=new FileReader();
-        fr.onload=function(){dataUrl=fr.result;};
-        fr.onerror=function(){dataUrl=null;};
-        fr.readAsDataURL(blob);
-      }catch(e){dataUrl=null;}
-    }
-
+    var dlUrl=videoUrl.replace(/\/v\//,'/dl/');
     var closePanel=function(){
       panel.classList.add('hide');
-      if(sv){try{sv.pause()}catch(e){}}
-    };
-
-    var doDownload=function(href){
-      var a=document.createElement('a');
-      a.href=href;a.download=fileName;
-      a.style.display='none';
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(function(){a.remove()},500);
-    };
-
-    var copyText=function(t){
-      if(navigator.clipboard&&navigator.clipboard.writeText){
-        navigator.clipboard.writeText(t).catch(function(){fallbackCopy(t)});
-      }else{fallbackCopy(t)}
-    };
-
-    /* 微信/企业微信内 <a download> 会被 WebView 忽略并整页跳转到 blob，导致黑屏卡死页；
-       因此在微信环境一律改走「生成链接」引导，杜绝任何导航离开当前页 */
-    var guideLink=function(msg){
-      toast(msg,'warn');
-      var lb=$('savePanelLinkBox');
-      if(lb)lb.classList.remove('hide');
+      if(sv){try{sv.pause()}catch(e){sv.src='';}}
     };
 
     var dl=$('savePanelDownload');
     if(dl){
       dl.onclick=function(){
-        if(isWx){guideLink('微信/企业微信内无法直接下载文件，请点「生成链接」，把链接发到聊天里点开即可保存');return;}
-        /* 先 blob URL 下载，再 data URL 兜底下载 */
-        doDownload(blobUrl);
-        if(dataUrl){setTimeout(function(){doDownload(dataUrl)},800);}
-        toast('已尝试下载，请在下载列表/文件查看','good');
+        if(isWx){toast('微信/企业微信内无法直接下载，请点「生成链接」把链接发到聊天','warn');return;}
+        var a=document.createElement('a');a.href=dlUrl;a.download=fileName;
+        a.style.display='none';document.body.appendChild(a);a.click();
+        setTimeout(function(){a.remove()},500);
+        toast('已开始下载，请在下载列表查看','good');
       };
     }
-    /* 生成链接：上传视频到后端，返回可访问的视频链接并自动复制 */
+    /* 生成链接：成片已在云端，直接复制链接即可 */
     var linkBtn=$('savePanelLink');
     if(linkBtn){
-      /* 先探测后端连通性：把「连不上服务器」和「上传本身失败」区分开，便于定位 */
-      var probe=function(cb){
-        if(!SERVER_URL){cb(true);return;}
-        var p=new XMLHttpRequest();
-        p.open('GET',SERVER_URL+'/api/health',true);
-        p.timeout=8000;
-        p.onload=function(){cb(p.status===200)};
-        p.onerror=function(){cb(false)};
-        p.ontimeout=function(){cb(false)};
-        p.send();
-      };
-      var failMsg=function(xhr){
-        var reason='网络错误';
-        if(location.protocol==='https:'&&SERVER_URL&&SERVER_URL.indexOf('http://')===0){
-          reason='页面是HTTPS、后端是HTTP，被混合内容拦截（请改用 http://43.142.44.57:3000 打开本页）';
-        }else if(xhr&&xhr.status){
-          reason='服务器返回 HTTP '+xhr.status;
-        }else if(SERVER_URL){
-          reason='无法连接服务器 '+SERVER_URL+'（超时/被拦截）';
-        }
-        return reason;
-      };
-      var resetBtn=function(){linkBtn.disabled=false;linkBtn.textContent='生成链接';};
       linkBtn.onclick=function(){
-        if(!SERVER_URL&&!SAME_ORIGIN){toast('后端地址未配置（SERVER_URL 为空），请联系技术人员','warn');return;}
-        linkBtn.disabled=true;linkBtn.textContent='连接中...';
-        probe(function(ok){
-          if(!ok){resetBtn();toast('上传失败：'+failMsg(null),'warn');return;}
-          linkBtn.textContent='上传中...';
-          var xhr=new XMLHttpRequest();
-          xhr.open('POST',apiBase()+'/api/upload?ext=mp4&name='+encodeURIComponent(fileName||'video.mp4'),true);
-          xhr.setRequestHeader('Content-Type','application/octet-stream');
-          xhr.timeout=180000;
-          xhr.onload=function(){
-            resetBtn();
-            var d=null;try{d=JSON.parse(xhr.responseText)}catch(e){}
-            if(d&&d.url){
-              var lb=$('savePanelLinkBox'),lt=$('savePanelLinkText');
-              if(lb)lb.classList.remove('hide');
-              if(lt)lt.value=d.url;
-              copyText(d.url);
-              toast('链接已生成并复制，粘贴到微信/企业微信发送即可','good');
-            }else{
-              toast('生成失败：'+(d&&d.error?d.error:'未知错误'),'warn');
-            }
-          };
-          xhr.onerror=function(){resetBtn();toast('上传失败：'+failMsg(xhr),'warn');};
-          xhr.ontimeout=function(){resetBtn();toast('上传超时（视频过大或网络慢），请重试','warn');};
-          xhr.send(blob);
-        });
+        var lb=$('savePanelLinkBox'),lt=$('savePanelLinkText');
+        if(lb)lb.classList.remove('hide');
+        if(lt)lt.value=videoUrl;
+        copyText(videoUrl);
+        toast('链接已复制，粘贴到微信/企业微信发送即可','good');
       };
     }
     var linkCopyBtn=$('savePanelLinkCopy');
     if(linkCopyBtn){
-      linkCopyBtn.onclick=function(){
-        var lt=$('savePanelLinkText');
-        if(lt&&lt.value){copyText(lt.value);toast('链接已复制','good');}
-        else{toast('请先生成链接','warn');}
-      };
+      linkCopyBtn.onclick=function(){copyText(videoUrl);toast('链接已复制','good');};
     }
-    /* 分享视频：用真实 MP4 File 走系统分享，选择微信好友/群直接发送 */
+    /* 分享：分享链接（企业微信内 files 会被丢弃，链接最稳） */
     var shareBtn=$('savePanelShare');
     if(shareBtn){
       shareBtn.onclick=function(){
-        if(!blob){toast('未检测到视频文件','warn');return;}
-        var file=(blob instanceof File)?blob:new File([blob],fileName,{type:'video/mp4'});
-        /* 必须同时满足 share + canShare(files) 才调用，否则企业微信会把 files 丢掉或直接跳转卡死页 */
-        var canFileShare=false;
-        if(navigator.share&&navigator.canShare){
-          try{canFileShare=navigator.canShare({files:[file]})===true}catch(e){canFileShare=false}
+        if(navigator.share){
+          try{
+            var p=navigator.share({title:'短视频成片',text:fileName,url:videoUrl});
+            if(p&&p.then)p.catch(function(){});
+          }catch(e){copyText(videoUrl);toast('已复制链接，粘贴到微信/企业微信发送','good');}
+        }else{
+          copyText(videoUrl);toast('已复制链接，粘贴到微信/企业微信发送','good');
         }
-        var fallback=function(msg){
-          if(isWx){guideLink(msg);}
-          else{doDownload(blobUrl);toast(msg+'，已改为下载保存','warn');}
-        };
-        if(!navigator.share||!canFileShare){
-          fallback('当前环境不支持发送文件');
-          return;
-        }
-        var p=null;
-        try{
-          p=navigator.share({files:[file],title:'短视频成片',text:fileName});
-        }catch(e){
-          fallback('分享调用失败（企业微信不支持直接发文件）');
-          return;
-        }
-        if(!p||!p.then){
-          fallback('分享调用失败（企业微信不支持直接发文件）');
-          return;
-        }
-        p.then(function(){toast('已发送，请在聊天中长按视频保存','good');})
-         .catch(function(e){
-           if(e&&e.name==='AbortError')return;
-           fallback('分享失败（企业微信不支持直接发文件）');
-         });
       };
     }
     var cl=$('savePanelClose');
     if(cl){cl.onclick=closePanel;}
     var xBtn=$('savePanelX');
     if(xBtn){xBtn.onclick=closePanel;}
-    /* 点遮罩空白处关闭，不返回首页 */
     panel.onclick=function(e){if(e.target===panel)closePanel();};
   }
+
   $('editRetakeBtn').addEventListener('click',function(){
     stopBgmPreview();
     var old=LAST_SHOT;if(old){if(old.url)URL.revokeObjectURL(old.url);if(old.finalUrl&&old.finalUrl!==old.url)URL.revokeObjectURL(old.finalUrl);}
