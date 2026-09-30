@@ -1159,7 +1159,7 @@ function applyFlip(){
 }
 
 function startCamera(){
-  var vc={facingMode:S.front?'user':'environment',width:{ideal:1920,max:2560},height:{ideal:1080,max:1440}};
+  var vc={facingMode:S.front?'user':'environment',width:{ideal:2560,max:3840},height:{ideal:1920,max:2880}};
   return navigator.mediaDevices.getUserMedia({
     video:vc,
     audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
@@ -1188,7 +1188,7 @@ function switchCamera(){
   if(S.recording||!S.stream)return;
   S.front=!S.front;
   var oldVid=S.stream.getVideoTracks(),aud=S.stream.getAudioTracks()[0];
-  var vc={facingMode:S.front?'user':'environment',width:{ideal:1920,max:2560},height:{ideal:1080,max:1440}};
+  var vc={facingMode:S.front?'user':'environment',width:{ideal:2560,max:3840},height:{ideal:1920,max:2880}};
   navigator.mediaDevices.getUserMedia({video:vc}).then(function(nst){
     var nt=nst.getVideoTracks()[0];
     S.stream=new MediaStream([nt,aud]);
@@ -1338,9 +1338,9 @@ function drawFrame(c,cw,ch){
 }
 
 function buildRecordStream(){
-  var cn=document.createElement('canvas');cn.width=720;cn.height=1280;
+  var cn=document.createElement('canvas');cn.width=1080;cn.height=1920;
   var cc=cn.getContext('2d'),raf=null;
-  var draw=function(){drawFrame(cc,720,1280);raf=requestAnimationFrame(draw)};
+  var draw=function(){drawFrame(cc,1080,1920);raf=requestAnimationFrame(draw)};
   draw();
   var cs=null,vt=null;
   try{cs=cn.captureStream(30);if(cs)vt=cs.getVideoTracks()[0]}catch(e){cs=null;vt=null}
@@ -1388,7 +1388,7 @@ function doStartRecord(){
   else{rs=S.stream;toast('当前浏览器不支持画面合成，将录制原始画面','warn')}
   if(!window.MediaRecorder){toast('当前浏览器不支持录像，请升级 Safari/Chrome','bad');if(S.flipClean){S.flipClean();S.flipClean=null}return}
   try{
-    S.recorder=new MediaRecorder(rs,{mimeType:S.recMime,videoBitsPerSecond:8000000,audioBitsPerSecond:192000});
+    S.recorder=new MediaRecorder(rs,{mimeType:S.recMime,videoBitsPerSecond:12000000,audioBitsPerSecond:192000});
   }catch(e){
     try{S.recorder=new MediaRecorder(rs);S.recMime=S.recorder.mimeType||''}
     catch(e2){toast('无法开始录像','bad');if(S.flipClean){S.flipClean();S.flipClean=null}return}
@@ -2519,9 +2519,9 @@ function buildSubTimeline(duration){
       var total=D;
       var subTimeline=buildSubTimeline(total);
 
-      /* 输出分辨率：不降分辨率（最长边上限1280，与录制一致），
-         避免合成阶段把 720x1280 缩到 405x720 造成发糊 */
-      var scale=Math.min(1,1280/Math.max(vw,vh));
+      /* 输出分辨率：与录制一致 1080x1920（1080p），仅当源更大时才缩到 1920 上限，
+         保证成片是真 1080p，不被降采样发糊 */
+      var scale=Math.min(1,1920/Math.max(vw,vh));
       var cw=Math.max(2,Math.round(vw*scale)),ch=Math.max(2,Math.round(vh*scale));
       var canvas=document.createElement('canvas');canvas.width=cw;canvas.height=ch;
       var ctx=canvas.getContext('2d');
@@ -2573,7 +2573,7 @@ function buildSubTimeline(duration){
       var recorder;
       try{
         var opts=mimeType?{mimeType:mimeType}:{};
-        try{opts.videoBitsPerSecond=8e6}catch(e){}
+        try{opts.videoBitsPerSecond=12e6}catch(e){}
         recorder=new MediaRecorder(stream,opts);
       }catch(e){recorder=new MediaRecorder(stream);}
       var chunks=[];recorder.ondataavailable=function(e){if(e.data&&e.data.size>0)chunks.push(e.data);};
