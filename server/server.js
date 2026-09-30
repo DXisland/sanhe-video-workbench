@@ -13,10 +13,13 @@
  *   WX_AGENT_ID     企业微信自建应用「AgentId」  —— 拿到管理员权限后填写
  *
  * 接口：
- *   POST /api/upload?ext=mp4   上传视频（body 为二进制），返回 { url }
- *   GET  /v/:file              访问视频（支持 Range 拖动播放）
+ *   POST /api/upload?ext=mp4&name=  上传视频（body 为二进制），返回 { url }
+ *   GET  /v/:file        浏览器打开 → 保存页（预览+保存按钮）；播放器子请求 → 视频字节
+ *   GET  /raw/:file      视频字节（供 <video> 使用，支持 Range）
+ *   GET  /dl/:file       强制下载（Content-Disposition: attachment）
  *   GET  /api/wx-config?url=   生成企业微信 JS-SDK 签名（需配置 WX_* ）
- *   GET  /api/health           健康检查
+ *   GET  /api/health     健康检查
+ *   GET  /               托管前端页面（同源，避免混合内容）
  */
 const http = require('http');
 const https = require('https');
@@ -78,11 +81,17 @@ function extToType(ext) {
 }
 
 /* ---------- 上传：接收二进制视频流，写入磁盘 ---------- */
+function sanitizeName(n) {
+  const s = String(n || '').replace(/[\\/:*?"<>|\r\n]+/g, '_').trim().slice(0, 80);
+  return s;
+}
+
 function handleUpload(req, res, query) {
   const ext = (query.get('ext') || 'mp4').replace(/[^a-z0-9]/gi, '').slice(0, 10) || 'mp4';
   const id = crypto.randomBytes(8).toString('hex');
   const fileName = id + '.' + ext;
   const filePath = path.join(videoDir, fileName);
+  const original = sanitizeName(query.get('name'));
 
   const ws = fs.createWriteStream(filePath);
   let size = 0;
@@ -102,6 +111,11 @@ function handleUpload(req, res, query) {
 
   ws.on('finish', () => {
     if (aborted) return;
+    if (original) {
+      try {
+        fs.writeFileSync(filePath + '.name', original, 'utf8');
+      } catch (e) { /* 忽略元数据写入失败 */ }
+    }
     sendJson(res, 200, { ok: true, url: publicBase(req) + '/v/' + fileName, id });
   });
   ws.on('error', (err) => {
@@ -110,8 +124,28 @@ function handleUpload(req, res, query) {
   });
 }
 
-/* ---------- 视频访问：支持 Range 拖动播放 ---------- */
-function handleVideo(req, res, pathname) {
+/* ---------- 下载文件名：优先上传时记录的原始文件名 ---------- */
+function downloadName(file) {
+  try {
+    const n = fs.readFileSync(path.join(videoDir, file + '.name'), 'utf8').trim();
+    if (n) return n;
+  } catch (e) { /* 无元数据 */ }
+  return '成片_' + path.basename(file, path.extname(file)).slice(0, 8) + path.extname(file);
+}
+
+/* RFC 5987：非 ASCII 文件名（中文）需要 filename* 编码 */
+function contentDisposition(file) {
+  const name = downloadName(file);
+  const ascii = name.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
+  return "attachment; filename=\"" + ascii + "\"; filename*=UTF-8''" + encodeURIComponent(name);
+}
+
+
+/* ---------- 视频访问：支持 Range 拖动播放 ----------
+   mode='raw' : 返回视频字节（播放器子请求）
+   mode='dl'  : 返回字节 + Content-Disposition: attachment（强制下载）
+   mode='auto': 浏览器导航请求（Accept 含 text/html 且无 Range）返回「保存页」HTML，其余返回字节 */
+function handleVideo(req, res, pathname, mode) {
   const file = path.basename(pathname);
   const filePath = path.join(videoDir, file);
   if (!fs.existsSync(filePath)) {
@@ -120,11 +154,21 @@ function handleVideo(req, res, pathname) {
     res.end('Not Found');
     return;
   }
+  if (mode === 'auto') {
+    const accept = String(req.headers.accept || '');
+    if (/text\/html/.test(accept) && !req.headers.range && req.method === 'GET') {
+      sendVideoPage(res, file);
+      return;
+    }
+    mode = 'raw';
+  }
   const stat = fs.statSync(filePath);
   const total = stat.size;
   const ext = path.extname(file).slice(1).toLowerCase();
   const type = extToType(ext);
   const range = req.headers.range;
+  const headers = { 'Content-Type': type, 'Accept-Ranges': 'bytes' };
+  if (mode === 'dl') headers['Content-Disposition'] = contentDisposition(file);
 
   setCors(res);
   if (range) {
@@ -138,18 +182,82 @@ function handleVideo(req, res, pathname) {
       res.end();
       return;
     }
-    res.writeHead(206, {
-      'Content-Type': type,
-      'Content-Length': end - start + 1,
-      'Content-Range': 'bytes ' + start + '-' + end + '/' + total,
-      'Accept-Ranges': 'bytes',
-    });
+    headers['Content-Length'] = end - start + 1;
+    headers['Content-Range'] = 'bytes ' + start + '-' + end + '/' + total;
+    res.writeHead(206, headers);
     fs.createReadStream(filePath, { start, end }).pipe(res);
   } else {
-    res.writeHead(200, { 'Content-Type': type, 'Content-Length': total, 'Accept-Ranges': 'bytes' });
+    headers['Content-Length'] = total;
+    res.writeHead(200, headers);
     fs.createReadStream(filePath).pipe(res);
   }
 }
+
+/* ---------- 保存页：浏览器打开 /v/xxx.mp4 时展示「预览 + 保存视频」界面 ---------- */
+function sendVideoPage(res, file) {
+  const name = downloadName(file).replace(/[<>&"]/g, '');
+  const raw = '/raw/' + file;
+  const dl = '/dl/' + file;
+  const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>${name}</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:#111;color:#fff;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;text-align:center}
+video{width:100%;max-height:62vh;background:#000;display:block}
+.hint{font-size:14px;color:#ffb4a8;line-height:1.7;padding:14px 18px 0}
+.wrap{padding:16px 18px 40px;max-width:520px;margin:0 auto}
+.name{font-size:15px;font-weight:700;margin:6px 0 14px;word-break:break-all}
+a.btn{display:block;width:100%;padding:14px 0;border:0;border-radius:10px;background:#e5322d;color:#fff;font-size:17px;font-weight:700;text-decoration:none;margin-bottom:12px}
+a.btn.alt{background:#2b2f36}
+.tip{display:none;background:#2a2418;border:1px solid #6b5322;color:#ffd479;border-radius:10px;padding:12px 14px;font-size:14px;line-height:1.8;text-align:left;margin-top:6px}
+.tip.on{display:block}
+.tip b{color:#fff}
+.ok{color:#8fd48f}
+</style>
+</head>
+<body>
+<video src="${raw}" controls playsinline webkit-playsinline preload="metadata"></video>
+<div class="wrap">
+  <div class="name">${name}</div>
+  <a class="btn" id="dl" href="${dl}">保存视频</a>
+  <a class="btn alt" id="copy" href="javascript:void(0)">复制本页链接</a>
+  <div class="hint" id="hint" style="display:none;padding:12px 0 0"></div>
+  <div class="tip" id="tip"></div>
+</div>
+<script>
+(function(){
+  var ua=navigator.userAgent||'';
+  var isWx=/micromessenger|wxwork/i.test(ua);
+  var tip=document.getElementById('tip');
+  var hint=document.getElementById('hint');
+  function showTip(html){tip.innerHTML=html;tip.className='tip on';}
+  if(isWx){
+    hint.style.display='block';
+    hint.innerHTML='你在微信/企业微信内打开，浏览器下载可能被拦截。';
+  }
+  document.getElementById('dl').onclick=function(e){
+    if(!isWx)return; /* 正常浏览器直接走 attachment 下载 */
+    e.preventDefault();
+    showTip('微信内可能无法直接保存，请按下面步骤：<br>1. 点右上角 <b>···</b> 菜单<br>2. 选择 <b>在浏览器中打开</b><br>3. 回到本页再点 <b>保存视频</b><br><br>仍然失败？点右上角菜单里的「复制链接」，在系统浏览器粘贴打开后保存。');
+  };
+  document.getElementById('copy').onclick=function(){
+    var t=location.href;
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(t).then(function(){showTip('<span class="ok">链接已复制</span>');},function(){window.prompt('长按复制链接：',t);});
+    }else{window.prompt('长按复制链接：',t);}
+  };
+})();
+</script>
+</body>
+</html>`;
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(html);
+}
+
 
 /* ---------- 企业微信 JS-SDK 签名 ---------- */
 let tokenCache = { token: '', expire: 0 };
@@ -227,7 +335,15 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (pathname.startsWith('/v/')) {
-    handleVideo(req, res, pathname);
+    handleVideo(req, res, pathname, 'auto');
+    return;
+  }
+  if (pathname.startsWith('/raw/')) {
+    handleVideo(req, res, pathname, 'raw');
+    return;
+  }
+  if (pathname.startsWith('/dl/')) {
+    handleVideo(req, res, pathname, 'dl');
     return;
   }
   if (req.method === 'GET' && pathname === '/api/wx-config') {

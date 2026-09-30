@@ -3140,7 +3140,7 @@ function loop(){
           if(!ok){resetBtn();toast('上传失败：'+failMsg(null),'warn');return;}
           linkBtn.textContent='上传中...';
           var xhr=new XMLHttpRequest();
-          xhr.open('POST',apiBase()+'/api/upload?ext=mp4',true);
+          xhr.open('POST',apiBase()+'/api/upload?ext=mp4&name='+encodeURIComponent(fileName||'video.mp4'),true);
           xhr.setRequestHeader('Content-Type','application/octet-stream');
           xhr.timeout=180000;
           xhr.onload=function(){
