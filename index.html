@@ -1325,8 +1325,6 @@ function drawOverlay(){
 function drawFrame(c,cw,ch){
   var vw=v.videoWidth,vh=v.videoHeight;
   if(!vw)return;
-  c.imageSmoothingEnabled=true;
-  if(c.imageSmoothingQuality!==undefined)c.imageSmoothingQuality='high';
   c.fillStyle='#04070d';c.fillRect(0,0,cw,ch);
   var s=Math.max(cw/vw,ch/vh)*S.zoom;
   var fw=vw*s,fh=vh*s;
@@ -1338,9 +1336,19 @@ function drawFrame(c,cw,ch){
 }
 
 function buildRecordStream(){
-  var cn=document.createElement('canvas');cn.width=1080;cn.height=1920;
+  /* zoom==1 时直接走原始相机流：硬件编码、时间戳精准、无重绘卡顿、无重采样糊 */
+  if(S.zoom===1){
+    return {stream:S.stream,clean:function(){}};
+  }
+  /* zoom≠1 需要裁剪/缩放：计算画布尺寸——只做等比裁剪/降采样，绝不放大 */
+  var sw=v.videoWidth||1080, sh=v.videoHeight||1920;
+  var targetW=1080, targetH=1920;
+  var scale=Math.min(1, Math.min(targetW/sw, targetH/sh));
+  var cw=Math.max(2, Math.round(sw*scale)), ch=Math.max(2, Math.round(sh*scale));
+  cw=cw-(cw%2); ch=ch-(ch%2);
+  var cn=document.createElement('canvas');cn.width=cw;cn.height=ch;
   var cc=cn.getContext('2d'),raf=null;
-  var draw=function(){drawFrame(cc,1080,1920);raf=requestAnimationFrame(draw)};
+  var draw=function(){drawFrame(cc,cw,ch);raf=requestAnimationFrame(draw)};
   draw();
   var cs=null,vt=null;
   try{cs=cn.captureStream(30);if(cs)vt=cs.getVideoTracks()[0]}catch(e){cs=null;vt=null}
@@ -1350,7 +1358,7 @@ function buildRecordStream(){
   return {stream:out,clean:function(){cancelAnimationFrame(raf);vt.stop()}};
 }
 function pickMime(){
-  var cands=['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
+  var cands=['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4','video/webm;codecs=vp8,opus','video/webm;codecs=vp9,opus','video/webm'];
   for(var i=0;i<cands.length;i++)if(window.MediaRecorder&&MediaRecorder.isTypeSupported(cands[i]))return cands[i];
   return '';
 }
@@ -1428,6 +1436,8 @@ function onRecordStop(){
   var blob=new Blob(S.chunks,{type:S.recMime||'video/mp4'});
   S.chunks=[];
   if(blob.size<1024){toast('录像失败，请重试','bad');return}
+  /* 记录是否为前置镜像：合成阶段需要统一翻回（保持输出与预览一致） */
+  LAST_SHOT.mirrored=!!S.flipH;
   showSheet('video',blob);
   if(S.recMime.indexOf('webm')>=0)toast('当前为 WebM 格式，上传抖音前可能需要转成 MP4','warn');
 }
@@ -2519,14 +2529,21 @@ function buildSubTimeline(duration){
       var total=D;
       var subTimeline=buildSubTimeline(total);
 
-      /* 输出分辨率：与录制一致 1080x1920（1080p），仅当源更大时才缩到 1920 上限，
-         保证成片是真 1080p，不被降采样发糊 */
+      /* 输出分辨率：固定 9:16（1080x1920 上限），等比裁剪源画面，
+         只做等比裁剪/降采样，绝不放大，保证成片是真 1080p、不发糊 */
       var scale=Math.min(1,1920/Math.max(vw,vh));
       var cw=Math.max(2,Math.round(vw*scale)),ch=Math.max(2,Math.round(vh*scale));
+      /* 强制 9:16，只做裁剪/降采样，绝不放大 */
+      var ar=9/16;
+      var tw=Math.min(1080,cw,Math.floor(ch*ar));
+      var th=Math.round(tw/ar);
+      if(th>1920){th=1920;tw=Math.round(th*ar);}
+      tw=tw-(tw%2);th=th-(th%2);
+      cw=tw;ch=th;
       var canvas=document.createElement('canvas');canvas.width=cw;canvas.height=ch;
       var ctx=canvas.getContext('2d');
+      /* 不再使用 high 平滑，降低 CPU 占用；等比缩放下默认平滑即锐利 */
       ctx.imageSmoothingEnabled=true;
-      if(ctx.imageSmoothingQuality!==undefined)ctx.imageSmoothingQuality='high';
       var stream=null;
       try{stream=canvas.captureStream(30)}catch(e){stream=null}
       if(!stream||!stream.getVideoTracks||!stream.getVideoTracks().length){
@@ -2611,6 +2628,19 @@ function buildSubTimeline(duration){
       }
       setTimeout(function(){getTitleLayer()},50);
 
+      /* 绘制主视频：若为前置镜像则水平翻回（保持输出与预览一致） */
+      function drawMain(c){
+        if(LAST_SHOT&&LAST_SHOT.mirrored){
+          c.save();
+          c.translate(cw,0);
+          c.scale(-1,1);
+          c.drawImage(mainVideo,0,0,cw,ch);
+          c.restore();
+        }else{
+          c.drawImage(mainVideo,0,0,cw,ch);
+        }
+      }
+
       function finishNow(){
         if(finished)return;
         finished=true;
@@ -2628,7 +2658,7 @@ function buildSubTimeline(duration){
         var mt=mainVideo.currentTime;
         if(!isFinite(mt)||mt<0)mt=(now-compStart)/1000;
         if(mainVideo.ended||mt>=total+0.5){
-          try{ctx.drawImage(mainVideo,0,0,cw,ch)}catch(e){}
+          try{drawMain(ctx)}catch(e){}
           finishNow();
           return;
         }
@@ -2639,9 +2669,9 @@ function buildSubTimeline(duration){
         else if(ins2&&mt>=INS2_S&&mt<INS2_E)iv=ins2;
         if(iv&&iv.readyState>=2){
           if(iv.paused){iv.play().catch(function(){})}
-          try{ctx.drawImage(iv,0,0,cw,ch)}catch(e){try{ctx.drawImage(mainVideo,0,0,cw,ch)}catch(e){}}
+          try{ctx.drawImage(iv,0,0,cw,ch)}catch(e){try{drawMain(ctx)}catch(e){}}
         }else{
-          try{ctx.drawImage(mainVideo,0,0,cw,ch)}catch(e){}
+          try{drawMain(ctx)}catch(e){}
         }
         var tl=getTitleLayer();
         if(tl)ctx.drawImage(tl,0,0);
