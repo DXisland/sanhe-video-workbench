@@ -365,7 +365,7 @@ body.no-nav .bottomnav{display:none}
         <span class="harrow">›</span>
       </div>
     </div>
-    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br>板块①脚本为本地模板生成，可对接技能后端升级为 AI 生成<br><span style="color:var(--brand);font-weight:700">版本 v3.0 · 2026-09-28</span></div>
+    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br>板块①脚本为本地模板生成，可对接技能后端升级为 AI 生成<br><span style="color:var(--brand);font-weight:700">版本 v3.1 · 2026-09-30</span></div>
   </div>
 
   <!-- 底部导航：历史记录 / 门店短视频（当前） / 门店直播 -->
@@ -561,9 +561,15 @@ body.no-nav .bottomnav{display:none}
     <div id="savePanel" class="hide" style="position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:9990;display:flex;align-items:center;justify-content:center;padding:16px">
       <div style="background:#fff;border-radius:14px;padding:16px;width:94%;max-width:420px;max-height:88vh;overflow:auto;text-align:center;position:relative">
         <button id="savePanelX" style="position:absolute;top:8px;right:10px;width:32px;height:32px;border:none;background:#f0f0f0;border-radius:50%;font-size:16px;line-height:1;color:#333;cursor:pointer">✕</button>
-        <div style="font-size:16px;font-weight:800;color:#333;margin-bottom:10px;padding-right:28px">保存成片 <span style="font-size:12px;color:#999;font-weight:600">v3.0</span></div>
+        <div style="font-size:16px;font-weight:800;color:#333;margin-bottom:10px;padding-right:28px">保存成片 <span style="font-size:12px;color:#999;font-weight:600">v3.1</span></div>
         <video id="savePanelVideo" controls playsinline webkit-playsinline x5-video-player-type="h5" x5-playsinline="true" style="width:100%;border-radius:10px;background:#000;max-height:34vh;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto;touch-action:manipulation"></video>
-        <p id="savePanelHint" style="font-size:13px;color:#666;margin:10px 0 6px;line-height:1.6">点「生成链接」得到视频链接，复制后发到微信/企业微信即可保存</p>
+        <p id="savePanelHint" style="font-size:13px;color:#666;margin:10px 0 6px;line-height:1.6">按下面三步，把视频保存到手机：</p>
+        <div style="text-align:left;background:#f6f7f9;border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:12.5px;line-height:1.95;color:#444">
+          <b style="color:#222">保存三步：</b><br>
+          ① 点<b>「保存视频」</b>，自动转成 MP4（首次需下载转换组件，之后很快）<br>
+          ② 点<b>「生成链接」</b>，链接会自动复制<br>
+          ③ 把链接粘贴到微信/企业微信，点开 → <b>「保存视频」</b>，文件在手机「文件管理 › 下载」里
+        </div>
         <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
           <button id="savePanelDownload" class="abtn primary" style="flex:1;min-width:110px">下载文件</button>
           <button id="savePanelLink" class="abtn primary" style="flex:1;min-width:110px">生成链接</button>
@@ -1319,6 +1325,8 @@ function drawOverlay(){
 function drawFrame(c,cw,ch){
   var vw=v.videoWidth,vh=v.videoHeight;
   if(!vw)return;
+  c.imageSmoothingEnabled=true;
+  if(c.imageSmoothingQuality!==undefined)c.imageSmoothingQuality='high';
   c.fillStyle='#04070d';c.fillRect(0,0,cw,ch);
   var s=Math.max(cw/vw,ch/vh)*S.zoom;
   var fw=vw*s,fh=vh*s;
@@ -1380,7 +1388,7 @@ function doStartRecord(){
   else{rs=S.stream;toast('当前浏览器不支持画面合成，将录制原始画面','warn')}
   if(!window.MediaRecorder){toast('当前浏览器不支持录像，请升级 Safari/Chrome','bad');if(S.flipClean){S.flipClean();S.flipClean=null}return}
   try{
-    S.recorder=new MediaRecorder(rs,{mimeType:S.recMime,videoBitsPerSecond:6000000,audioBitsPerSecond:128000});
+    S.recorder=new MediaRecorder(rs,{mimeType:S.recMime,videoBitsPerSecond:8000000,audioBitsPerSecond:192000});
   }catch(e){
     try{S.recorder=new MediaRecorder(rs);S.recMime=S.recorder.mimeType||''}
     catch(e2){toast('无法开始录像','bad');if(S.flipClean){S.flipClean();S.flipClean=null}return}
@@ -2170,7 +2178,7 @@ function renderEdit(){
     $('editSynthStatus').classList.add('hide');
     $('editSynthesizeBtn').disabled=true;
     $('editSaveBtn').disabled=false;
-    $('editShotInfo').textContent='照片素材已就绪，可直接保存';
+    $('editShotInfo').textContent='照片已就绪 ✅ 下一步：点「保存视频」按提示保存';
     editState='done';
     return;
   }
@@ -2240,7 +2248,7 @@ function startSynthesis(){
       $('editSynthesizeBtn').disabled=false;
       $('editSaveBtn').disabled=false;
       editState='done';
-      $('editShotInfo').textContent='成片已合成，可保存；如需调整素材可重新合成';
+      $('editShotInfo').textContent='成片已合成 ✅ 下一步：点「保存视频」按提示保存';
       toast('成片合成完成','good');
     }).catch(function(err){
       clearT();
@@ -2511,11 +2519,14 @@ function buildSubTimeline(duration){
       var total=D;
       var subTimeline=buildSubTimeline(total);
 
-      /* 输出分辨率：最长边720，大幅降低绘制/编码负担，画面流畅 */
-      var scale=Math.min(1,720/Math.max(vw,vh));
+      /* 输出分辨率：不降分辨率（最长边上限1280，与录制一致），
+         避免合成阶段把 720x1280 缩到 405x720 造成发糊 */
+      var scale=Math.min(1,1280/Math.max(vw,vh));
       var cw=Math.max(2,Math.round(vw*scale)),ch=Math.max(2,Math.round(vh*scale));
       var canvas=document.createElement('canvas');canvas.width=cw;canvas.height=ch;
       var ctx=canvas.getContext('2d');
+      ctx.imageSmoothingEnabled=true;
+      if(ctx.imageSmoothingQuality!==undefined)ctx.imageSmoothingQuality='high';
       var stream=null;
       try{stream=canvas.captureStream(30)}catch(e){stream=null}
       if(!stream||!stream.getVideoTracks||!stream.getVideoTracks().length){
@@ -2562,7 +2573,7 @@ function buildSubTimeline(duration){
       var recorder;
       try{
         var opts=mimeType?{mimeType:mimeType}:{};
-        try{opts.videoBitsPerSecond=3e6}catch(e){}
+        try{opts.videoBitsPerSecond=8e6}catch(e){}
         recorder=new MediaRecorder(stream,opts);
       }catch(e){recorder=new MediaRecorder(stream);}
       var chunks=[];recorder.ondataavailable=function(e){if(e.data&&e.data.size>0)chunks.push(e.data);};
@@ -2971,7 +2982,7 @@ function loop(){
           var ab=reader.result;
           ffmpeg.load().then(function(){
             try{ffmpeg.FS('writeFile','in.webm',new Uint8Array(ab))}catch(e){reject(e);return}
-            return ffmpeg.run('-i','in.webm','-c:v','libx264','-preset','ultrafast','-crf','28','-vf','scale=trunc(iw/2)*2:trunc(ih/2)*2','-pix_fmt','yuv420p','-c:a','aac','-b:a','128k','-movflags','+faststart','out.mp4');
+            return ffmpeg.run('-i','in.webm','-c:v','libx264','-preset','ultrafast','-crf','19','-vf','scale=trunc(iw/2)*2:trunc(ih/2)*2','-pix_fmt','yuv420p','-c:a','aac','-b:a','192k','-movflags','+faststart','out.mp4');
           }).then(function(){
             var data=ffmpeg.FS('readFile','out.mp4');
             var mp4=new Blob([data],{type:'video/mp4'});
@@ -3053,9 +3064,9 @@ function loop(){
     var hintEl=$('savePanelHint');
     if(hintEl){
       if(isWx){
-        hintEl.textContent='企业微信内无法直接保存：点「生成链接」，复制链接发到聊天，点开即可保存';
+        hintEl.textContent='你在微信/企业微信内：无法直接下载，请按下面三步用「生成链接」：';
       }else{
-        hintEl.textContent='点「生成链接」得到视频链接后复制发送；或「下载文件」直接保存';
+        hintEl.textContent='按下面三步，把视频保存到手机：';
       }
     }
 
