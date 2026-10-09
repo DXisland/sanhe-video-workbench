@@ -29,6 +29,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { URL } = require('url');
 const { spawn } = require('child_process');
+const os = require('os');
 
 const config = {
   port: parseInt(process.env.PORT || '3000', 10),
@@ -432,6 +433,58 @@ async function handleCompose(req, res) {
 }
 
 
+/* ---------- 语音识别（字幕）：自托管 whisper.cpp，免费、不依赖第三方计费 ---------- */
+const WHISPER_CLI = process.env.WHISPER_CLI || path.join(os.homedir(), 'whisper.cpp', 'build', 'bin', 'whisper-cli');
+const WHISPER_MODEL = process.env.WHISPER_MODEL || path.join(os.homedir(), 'whisper.cpp', 'models', 'ggml-small-q5_1.bin');
+
+function handleAsr(req, res) {
+  const tmp = path.join(config.dataDir, 'tmp', crypto.randomBytes(8).toString('hex'));
+  fs.mkdirSync(tmp, { recursive: true });
+  const rawPath = path.join(tmp, 'in.bin');
+  const wavPath = path.join(tmp, 'in.wav');
+  const outPrefix = path.join(tmp, 'out');
+  let size = 0, aborted = false;
+  const ws = fs.createWriteStream(rawPath);
+  const cleanup = () => { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (e) { /* 忽略 */ } };
+  req.on('data', (c) => {
+    size += c.length;
+    if (size > 80 * 1024 * 1024) {
+      aborted = true;
+      ws.destroy();
+      fs.unlink(rawPath, () => {});
+      sendJson(res, 413, { ok: false, error: '音频过大' });
+    }
+  });
+  req.pipe(ws);
+  ws.on('error', (err) => { fs.unlink(rawPath, () => {}); sendJson(res, 500, { ok: false, error: err.message }); });
+  ws.on('finish', () => {
+    if (aborted) return;
+    if (!fs.existsSync(WHISPER_CLI) || !fs.existsSync(WHISPER_MODEL)) {
+      cleanup();
+      sendJson(res, 500, { ok: false, error: '语音识别服务未部署' });
+      return;
+    }
+    /* 1) 用 ffmpeg 归一化为 16k 单声道 WAV（兼容 wav / webm / mp4 输入） */
+    runFfmpeg(['-y', '-i', rawPath, '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', wavPath])
+      .then(() => new Promise((resolve, reject) => {
+        const child = spawn(WHISPER_CLI, ['-m', WHISPER_MODEL, '-f', wavPath, '-l', 'zh', '-np', '-otxt', '-of', outPrefix], { stdio: ['ignore', 'ignore', 'ignore'] });
+        const timer = setTimeout(() => { try { child.kill('SIGKILL'); } catch (e) { /* 忽略 */ } reject(new Error('识别超时')); }, 300000);
+        child.on('error', (e) => { clearTimeout(timer); reject(e); });
+        child.on('close', (code) => { clearTimeout(timer); code === 0 ? resolve() : reject(new Error('识别失败 code ' + code)); });
+      }))
+      .then(() => {
+        let text = '';
+        try { text = fs.readFileSync(outPrefix + '.txt', 'utf8').replace(/\s+/g, ' ').trim(); } catch (e) { /* 忽略 */ }
+        cleanup();
+        sendJson(res, 200, { ok: true, text: text });
+      })
+      .catch(() => {
+        cleanup();
+        sendJson(res, 200, { ok: true, text: '' });
+      });
+  });
+}
+
 /* ---------- 企业微信 JS-SDK 签名 ---------- */
 let tokenCache = { token: '', expire: 0 };
 let ticketCache = { ticket: '', expire: 0 };
@@ -509,6 +562,10 @@ const server = http.createServer((req, res) => {
   }
   if (req.method === 'POST' && pathname === '/api/compose') {
     handleCompose(req, res);
+    return;
+  }
+  if (req.method === 'POST' && pathname === '/api/asr') {
+    handleAsr(req, res);
     return;
   }
   if (pathname.startsWith('/v/')) {

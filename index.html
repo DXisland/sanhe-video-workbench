@@ -1914,7 +1914,6 @@ function chunkSmart(text,maxLen){
   if(remaining.length>0)pieces.push(remaining);
   return pieces;
 }
-var SILICONFLOW_KEY='sk-omqpdqtimerphhwphamozxrntcsejjqjpxsxkqbqicfqbuou';
 function recognizeSubtitle(cb){
   var blob=LAST_SHOT&&LAST_SHOT.blob;
   var src=(LAST_SHOT&&LAST_SHOT.url)||'';
@@ -2025,51 +2024,18 @@ function audioBufferToWav(buffer){
   return new Blob([ab],{type:'audio/wav'});
 }
 function callSenseVoice(fileBlob,filename,cb){
-  var MAX_RETRY=3,attempt=0;
-  function tryOnce(){
-    attempt++;
-    var fd=new FormData();
-    fd.append('file',fileBlob,filename||'audio.webm');
-    fd.append('model','FunAudioLLM/SenseVoiceSmall');
-    var done=false;
-    var ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
-    var timer=setTimeout(function(){
-      if(!done){done=true;try{ctrl&&ctrl.abort()}catch(e){}
-        if(attempt<MAX_RETRY){toast('识别超时，自动重试 '+(attempt+1)+'/'+MAX_RETRY,'warn');setTimeout(tryOnce,600);}
-        else{toast('语音识别超时，请重试','warn');cb&&cb('');}
-      }
-    },60000);
-    var finish=function(text){
-      if(done)return;done=true;
-      clearTimeout(timer);
-      cb&&cb(text);
-    };
-    fetch('https://api.siliconflow.cn/v1/audio/transcriptions',{
-      method:'POST',
-      headers:{'Authorization':'Bearer '+SILICONFLOW_KEY},
-      body:fd,
-      signal:ctrl?ctrl.signal:undefined
-    }).then(function(r){
-      if(!r.ok)throw new Error('HTTP '+r.status);
-      return r.json();
-    }).then(function(data){
-      var text=(data&&data.text)||'';
-      if(!text){
-        done=true;clearTimeout(timer);
-        if(attempt<MAX_RETRY){toast('未识别到内容，自动重试 '+(attempt+1)+'/'+MAX_RETRY,'warn');setTimeout(tryOnce,600);}
-        else{toast('未识别到语音内容','warn');cb&&cb('');}
-        return;
-      }
-      try{text=text.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}]/gu,'').trim()}catch(e){}
-      finish(text);
-    }).catch(function(err){
-      if(done)return;
-      done=true;clearTimeout(timer);
-      if(attempt<MAX_RETRY){toast('识别失败，自动重试 '+(attempt+1)+'/'+MAX_RETRY,'warn');setTimeout(tryOnce,800);}
-      else{toast('语音识别失败：'+(err&&err.message||err),'warn');cb&&cb('');}
-    });
-  }
-  tryOnce();
+  /* 语音识别改由服务器自托管 whisper 完成，免费且不依赖第三方计费 */
+  var xhr=new XMLHttpRequest();
+  xhr.open('POST',apiBase()+'/api/asr',true);
+  xhr.setRequestHeader('Content-Type','application/octet-stream');
+  xhr.timeout=300000;
+  xhr.onload=function(){
+    var d=null;try{d=JSON.parse(xhr.responseText)}catch(e){}
+    cb&&cb((d&&d.text)||'');
+  };
+  xhr.onerror=function(){cb&&cb('')};
+  xhr.ontimeout=function(){cb&&cb('')};
+  xhr.send(fileBlob);
 }
 /* 无VAD时的默认拆分：按所有常见标点拆成多段 */
 function splitTextDefault(text){
