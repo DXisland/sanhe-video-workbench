@@ -331,11 +331,11 @@ body.no-nav .bottomnav{display:none}
 <div class="view on" id="view-home">
   <div class="pagetitle">
     <h1>门店短视频</h1>
-    <p>脚本生成 · 拍摄教学 · 发布指引</p>
+    <p>拍摄教学 · 剪辑成片 · 发布指引</p>
   </div>
   <div class="scroller">
     <div class="homecards">
-      <div class="hcard" data-go="prep">
+      <div class="hcard hide" data-go="prep">
         <div class="hicon g1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M9.5 12l1.8 1.8L15 9.5"/></svg></div>
         <div class="hcontent">
           <h3>脚本生成</h3>
@@ -365,7 +365,7 @@ body.no-nav .bottomnav{display:none}
         <span class="harrow">›</span>
       </div>
     </div>
-    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br>板块①脚本为本地模板生成，可对接技能后端升级为 AI 生成<br><span style="color:var(--brand);font-weight:700">版本 v3.2 · 2026-09-30</span></div>
+    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700">版本 v3.3 · 2026-10-09</span></div>
   </div>
 
   <!-- 底部导航：历史记录 / 门店短视频（当前） / 门店直播 -->
@@ -561,7 +561,7 @@ body.no-nav .bottomnav{display:none}
     <div id="savePanel" class="hide" style="position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:9990;display:flex;align-items:center;justify-content:center;padding:16px">
       <div style="background:#fff;border-radius:14px;padding:16px;width:94%;max-width:420px;max-height:88vh;overflow:auto;text-align:center;position:relative">
         <button id="savePanelX" style="position:absolute;top:8px;right:10px;width:32px;height:32px;border:none;background:#f0f0f0;border-radius:50%;font-size:16px;line-height:1;color:#333;cursor:pointer">✕</button>
-        <div style="font-size:16px;font-weight:800;color:#333;margin-bottom:10px;padding-right:28px">保存成片 <span style="font-size:12px;color:#999;font-weight:600">v3.2</span></div>
+        <div style="font-size:16px;font-weight:800;color:#333;margin-bottom:10px;padding-right:28px">保存成片 <span style="font-size:12px;color:#999;font-weight:600">v3.3</span></div>
         <video id="savePanelVideo" controls playsinline webkit-playsinline x5-video-player-type="h5" x5-playsinline="true" style="width:100%;border-radius:10px;background:#000;max-height:34vh;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto;touch-action:manipulation"></video>
         <p id="savePanelHint" style="font-size:13px;color:#666;margin:10px 0 6px;line-height:1.6">按下面三步，把视频保存到手机：</p>
         <div style="text-align:left;background:#f6f7f9;border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:12.5px;line-height:1.95;color:#444">
@@ -651,7 +651,7 @@ body.no-nav .bottomnav{display:none}
       <div class="feat"><i></i><div><b>构图辅助线</b>：半身 / 全身，九宫格 + 头顶/肩部/腰部/膝盖定位虚线，主体对齐取景框</div></div>
       <div class="feat"><i></i><div><b>亮度 / 水平</b>：仅在需要调整时提示，分区域弹出不重叠</div></div>
       <div class="feat"><i></i><div><b>人声检测</b>：收声太小实时提示，自动降噪</div></div>
-      <div class="feat"><i></i><div><b>提词器</b>：板块一生成的口播文案自动带入，支持自动滚动</div></div>
+      <div class="feat"><i></i><div><b>提词器</b>：可手动输入/粘贴口播文案，支持自动滚动</div></div>
       <div class="feat"><i></i><div><b>镜像 / 垂直翻转</b>，支持视频录像，导出 MP4 高清视频</div></div>
     </div>
     <button id="startBtn">开 启 摄 像 头</button>
