@@ -617,6 +617,7 @@ body.no-nav .bottomnav{display:none}
       <div class="right">
         <span class="chip btn" id="prompterBtn">提示词</span>
         <span class="chip btn" id="guideBtn">辅助线</span>
+        <span class="chip btn" id="micBtn">麦克风</span>
         <span class="chip btn" id="flipCameraBtn">翻转</span>
       </div>
       <span id="timer"><span class="rdot"></span><span id="timerTxt">00:00</span></span>
@@ -624,6 +625,15 @@ body.no-nav .bottomnav{display:none}
   </div>
 
   <div class="warnbox" id="warnBright"></div>
+
+  <div id="micMenu" class="hide" style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;display:flex;align-items:flex-end;justify-content:center">
+    <div style="background:#fff;border-radius:14px 14px 0 0;padding:16px 16px 18px;width:100%;max-width:520px;max-height:62vh;overflow:auto">
+      <div style="font-size:16px;font-weight:800;color:#333;margin-bottom:6px">选择麦克风</div>
+      <div style="font-size:12px;color:#999;margin-bottom:6px">戴耳机/蓝牙导致录音失败时，请切换到「手机麦克风」</div>
+      <div id="micList"></div>
+      <button id="micMenuClose" class="abtn ghost" style="width:100%;margin-top:10px">取消</button>
+    </div>
+  </div>
 
   <div id="micPill">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5M8.5 21.5h7"/></svg>
@@ -724,7 +734,7 @@ var S={
   stream:null,front:true,flipH:true,flipV:false,mode:'half',shoot:'video',
   recording:false,recorder:null,chunks:[],recMime:'',recStart:0,recDur:0,recTimer:null,flipClean:null,
   guides:true,ready:false,camActive:false,wakeLock:null,actx:null,analyser:null,shake:false,
-  zoom:1,brightBad:false
+  zoom:1,brightBad:false,audioDeviceId:''
 };
 var PENDING_PROMPT=null;
 var LAST_SHOT=null;
@@ -1165,20 +1175,27 @@ function applyFlip(){
 
 function startCamera(){
   var vc={facingMode:S.front?'user':'environment',width:{ideal:2560,max:3840},height:{ideal:1920,max:2880}};
-  return navigator.mediaDevices.getUserMedia({
-    video:vc,
-    audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
-  }).then(function(st){
+  var ac={echoCancellation:true,noiseSuppression:true,autoGainControl:true};
+  if(S.audioDeviceId){ac.deviceId={exact:S.audioDeviceId};}
+  function wire(st){
     S.stream=st;
     v.srcObject=st;
     v.muted=true;
     v.playsInline=true;
     v.setAttribute('playsinline','');
     return v.play().catch(function(){});
+  }
+  return navigator.mediaDevices.getUserMedia({video:vc,audio:ac}).then(wire).catch(function(){
+    /* 音频获取失败（常见于耳机/蓝牙占用麦克风）：回退仅视频，仍可拍摄 */
+    return navigator.mediaDevices.getUserMedia({video:vc}).then(function(st){
+      toast('未检测到可用麦克风：视频将没有声音，请拔掉耳机或检查权限','warn');
+      return wire(st);
+    });
   });
 }
 function initAudio(){
   try{
+    if(S.actx){try{S.actx.close()}catch(e){}}
     var AC=window.AudioContext||window.webkitAudioContext;
     S.actx=new AC();
     var src=S.actx.createMediaStreamSource(S.stream);
@@ -1188,6 +1205,58 @@ function initAudio(){
     src.connect(S.analyser);
     S.actx.resume&&S.actx.resume();
   }catch(e){}
+}
+/* 列出可用麦克风 */
+function listAudioInputs(cb){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.enumerateDevices){cb&&cb([]);return;}
+  navigator.mediaDevices.enumerateDevices().then(function(ds){
+    cb&&cb(ds.filter(function(d){return d.kind==='audioinput'}));
+  }).catch(function(){cb&&cb([])});
+}
+/* 切换麦克风：用新设备重取音频轨道，替换进当前流 */
+function selectAudioDevice(deviceId){
+  var ac={echoCancellation:true,noiseSuppression:true,autoGainControl:true};
+  if(deviceId){ac.deviceId={exact:deviceId};S.audioDeviceId=deviceId;}
+  navigator.mediaDevices.getUserMedia({audio:ac}).then(function(nst){
+    var newAud=nst.getAudioTracks()[0];
+    if(!newAud){toast('未获取到麦克风','warn');return;}
+    var vt=(S.stream?S.stream.getVideoTracks():[]).slice();
+    var oldAud=(S.stream?S.stream.getAudioTracks():[]).slice();
+    var ns=new MediaStream(vt.concat([newAud]));
+    S.stream=ns;
+    v.srcObject=ns;
+    oldAud.forEach(function(t){try{t.stop()}catch(e){}});
+    initAudio();
+    toast('麦克风已切换','good');
+  }).catch(function(e){
+    toast('切换麦克风失败：'+(e&&e.message?e.message:e),'warn');
+  });
+}
+function openMicMenu(){
+  listAudioInputs(function(devs){
+    var list=$('micList');if(!list)return;
+    if(!devs||!devs.length){toast('未检测到可用麦克风','warn');return;}
+    var html='';
+    for(var i=0;i<devs.length;i++){
+      var d=devs[i];
+      var name=d.label||('麦克风 '+(i+1));
+      var sel=(d.deviceId===S.audioDeviceId)||(!S.audioDeviceId&&i===0);
+      html+='<div data-micid="'+esc(d.deviceId)+'" style="padding:13px 10px;border-bottom:1px solid #eee;font-size:14px;color:'+(sel?'#B80000;font-weight:700':'#333')+'">'+esc(name)+'</div>';
+    }
+    list.innerHTML=html;
+    var m=$('micMenu');if(m)m.classList.remove('hide');
+    var items=list.querySelectorAll('[data-micid]');
+    for(var k=0;k<items.length;k++){
+      (function(el){
+        el.onclick=function(){
+          var id=el.getAttribute('data-micid');
+          if($('micMenu'))$('micMenu').classList.add('hide');
+          if(S.recording){toast('正在录制，无法切换麦克风','warn');return;}
+          selectAudioDevice(id);
+        };
+      })(items[k]);
+    }
+  });
 }
 function switchCamera(){
   if(S.recording||!S.stream)return;
@@ -1831,7 +1900,7 @@ function triggerSubtitleGen(){
     var ov=document.getElementById('subGenOverlay');if(ov)ov.remove();
     if(style.parentNode)style.remove();
     if(stepBtn)stepBtn.disabled=false;
-    if(!lines||!lines.length){toast('未识别到人声，请重试','warn');return;}
+    if(!lines||!lines.length){toast('未识别到语音内容：请确认拍摄时说话清晰、环境安静，再试一次','warn');return;}
     generateSubtitleLines(lines);
   });
 }
@@ -1920,47 +1989,14 @@ function recognizeSubtitle(cb){
   if(!blob&&!src){toast('没有可识别的视频','warn');cb&&cb([]);return;}
   window._speechSegments=null;
   var sent=false;
-  var finish=function(lines){
-    if(sent)return;sent=true;
-    cb&&cb(lines);
-  };
-  /* 上传整个视频识别（回退方案），返回后统一拆分 */
-  var doVideoRecognize=function(b){
-    callSenseVoice(b,'video.mp4',function(text){
+  var finish=function(lines){ if(sent)return;sent=true; cb&&cb(lines); };
+  /* 直接把原始视频交给服务器：服务器用 ffmpeg 解码音轨 + whisper 识别，
+     不再依赖浏览器端解码/VAD（耳机/重拍等场景下更稳定可靠） */
+  var doRecognize=function(b){
+    callSenseVoice(b,'video',function(text){
       if(!text){finish([]);return;}
       var lines=splitTextDefault(text);
       finish((lines&&lines.length)?lines:[text]);
-    });
-  };
-  var doRecognize=function(b){
-    /* 优先解码出音频（快、体积小），VAD + 转WAV上传；失败才回退上传整段视频 */
-    decodeVideoAudio(b,function(audioBuffer){
-      if(audioBuffer){
-        var segs=vadSegments(audioBuffer);
-        window._speechSegments=(segs&&segs.length)?segs:null;
-        var wav=null;
-        try{wav=audioBufferToWav(audioBuffer)}catch(e){}
-        if(wav&&wav.size>0){
-          callSenseVoice(wav,'audio.wav',function(text){
-            if(!text){
-              /* WAV 识别失败，回退上传整段视频再试一次 */
-              doVideoRecognize(b);
-              return;
-            }
-            var lines;
-            if(window._speechSegments&&window._speechSegments.length>0){
-              lines=splitTextToNSegments(text,window._speechSegments.length);
-            }else{
-              lines=splitTextDefault(text);
-            }
-            finish((lines&&lines.length)?lines:[text]);
-          });
-        }else{
-          doVideoRecognize(b);
-        }
-      }else{
-        doVideoRecognize(b);
-      }
     });
   };
   if(blob){doRecognize(blob);return;}
@@ -2627,6 +2663,10 @@ $('guideBtn').addEventListener('click',function(){
 $('flipCameraBtn').addEventListener('click',function(){
   switchCamera();
 });
+
+$('micBtn').addEventListener('click',openMicMenu);
+$('micMenuClose').addEventListener('click',function(){ $('micMenu').classList.add('hide'); });
+$('micMenu').addEventListener('click',function(e){ if(e.target===this)this.classList.add('hide'); });
 
 $('prompterBtn').addEventListener('click',togglePrompter);
 $('prompterClose').addEventListener('click',function(){
