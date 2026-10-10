@@ -811,7 +811,7 @@ fetchLogs(0); poll();
 }
 
 /* ---------- 路由 ---------- */
-const server = http.createServer((req, res) => {
+function handleRequest(req, res) {
   const parsed = new URL(req.url, 'http://localhost');
   const pathname = parsed.pathname;
   const query = parsed.searchParams;
@@ -909,8 +909,9 @@ const server = http.createServer((req, res) => {
     }
   }
   sendJson(res, 404, { ok: false, error: 'Not Found' });
-});
+}
 
+const server = http.createServer(handleRequest);
 server.listen(config.port, () => {
   console.log('video-workbench-server 已启动：http://localhost:' + config.port);
   console.log('视频存储目录：' + videoDir);
@@ -918,3 +919,20 @@ server.listen(config.port, () => {
   console.log('企业微信应用已配置：' + (config.corpId && config.corpSecret ? '是' : '否（待填 WX_* ）'));
   console.log('前端页面：' + (FRONTEND_FILE || '未找到（仅提供 API）'));
 });
+
+/* ---------- HTTPS（证书存在时自动启用 443） ---------- */
+const CERT_DIR = process.env.CERT_DIR || path.join(__dirname, 'cert');
+const CERT_FILE = path.join(CERT_DIR, 'certificate.crt');
+const KEY_FILE = path.join(CERT_DIR, 'private.key');
+const CA_FILE = path.join(CERT_DIR, 'ca_bundle.crt');
+const HTTPS_PORT = parseInt(process.env.HTTPS_PORT || '443', 10);
+if (fs.existsSync(CERT_FILE) && fs.existsSync(KEY_FILE)) {
+  const tlsOpts = { key: fs.readFileSync(KEY_FILE), cert: fs.readFileSync(CERT_FILE) };
+  if (fs.existsSync(CA_FILE)) tlsOpts.ca = fs.readFileSync(CA_FILE);
+  const httpsServer = https.createServer(tlsOpts, handleRequest);
+  httpsServer.listen(HTTPS_PORT, () => {
+    console.log('HTTPS 已启动：端口 ' + HTTPS_PORT);
+  });
+} else {
+  console.log('未找到证书文件（cert/certificate.crt + private.key），仅 HTTP');
+}

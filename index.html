@@ -702,7 +702,7 @@ var isIOS=/iP(hone|ad|od)/.test(navigator.userAgent);
 /* 后端服务器地址：部署 server/server.js 后填入，例如 'https://video.example.com'（末尾不要带 /）
    若页面本身由该服务器托管（同源），则自动走相对路径，
    避免 https 页面调用 http 接口被浏览器按「混合内容」拦截 */
-var SERVER_URL='http://43.142.44.57:3000';
+var SERVER_URL='https://43.142.44.57';
 var SAME_ORIGIN=false;
 /* 若当前页面就部署在后端服务器上（同域名），自动改为相对路径，杜绝混合内容/CORS 问题 */
 if(/^https?:$/.test(location.protocol)&&SERVER_URL){
