@@ -390,11 +390,11 @@ async function handleCompose(req, res) {
   /* 视频滤镜：主视频 9:16 裁剪，镜像翻转，穿插素材整屏替换，字幕烧录 */
   const fc = [];
   let last = 'm0';
-  fc.push('[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560,setsar=1' + (mirrored ? ',hflip' : '') + '[m0]');
+  fc.push('[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1' + (mirrored ? ',hflip' : '') + '[m0]');
   for (let i = 0; i < insFiles.length; i++) {
     const inp = (i + 1) + ':v';
     const st = insFiles[i].start, en = st + insFiles[i].dur;
-    fc.push('[' + inp + ']scale=1440:2560,setsar=1[i' + i + ']');
+    fc.push('[' + inp + ']scale=1080:1920,setsar=1[i' + i + ']');
     fc.push('[' + last + '][i' + i + ']overlay=0:0:enable=\'between(t,' + st.toFixed(3) + ',' + en.toFixed(3) + ')\':eof_action=pass[m' + (i + 1) + ']');
     last = 'm' + (i + 1);
   }

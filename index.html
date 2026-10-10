@@ -1539,7 +1539,7 @@ function buildRecordStream(){
   }
   /* zoom≠1 需要裁剪/缩放：计算画布尺寸——只做等比裁剪/降采样，绝不放大 */
   var sw=v.videoWidth||1080, sh=v.videoHeight||1920;
-  var targetW=1440, targetH=2560;
+  var targetW=1080, targetH=1920;
   var scale=Math.min(1, Math.min(targetW/sw, targetH/sh));
   var cw=Math.max(2, Math.round(sw*scale)), ch=Math.max(2, Math.round(sh*scale));
   cw=cw-(cw%2); ch=ch-(ch%2);
