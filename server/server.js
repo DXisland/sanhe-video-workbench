@@ -361,7 +361,7 @@ async function handleCompose(req, res) {
   const mirrored = !!input.mirrored;
   const name = String(input.name || '');
 
-  const args = ['-y', '-i', mainPath];
+  const args = ['-y', '-fflags', '+genpts+discardcorrupt', '-i', mainPath];
   const insFiles = [];
   for (let i = 0; i < ins.length; i++) {
     const u = ins[i] && ins[i].url;
@@ -385,11 +385,11 @@ async function handleCompose(req, res) {
   /* 视频滤镜：主视频 9:16 裁剪，镜像翻转，穿插素材整屏替换，字幕烧录 */
   const fc = [];
   let last = 'm0';
-  fc.push('[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1' + (mirrored ? ',hflip' : '') + '[m0]');
+  fc.push('[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560,setsar=1' + (mirrored ? ',hflip' : '') + '[m0]');
   for (let i = 0; i < insFiles.length; i++) {
     const inp = (i + 1) + ':v';
     const st = insFiles[i].start, en = st + insFiles[i].dur;
-    fc.push('[' + inp + ']scale=1080:1920,setsar=1[i' + i + ']');
+    fc.push('[' + inp + ']scale=1440:2560,setsar=1[i' + i + ']');
     fc.push('[' + last + '][i' + i + ']overlay=0:0:enable=\'between(t,' + st.toFixed(3) + ',' + en.toFixed(3) + ')\':eof_action=pass[m' + (i + 1) + ']');
     last = 'm' + (i + 1);
   }
@@ -413,7 +413,7 @@ async function handleCompose(req, res) {
 
   args.push('-filter_complex', fc.join(';'));
   args.push('-map', '[' + vLabel + ']', '-map', '[aout]');
-  args.push('-c:v', 'libx264', '-crf', '20', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart');
+  args.push('-c:v', 'libx264', '-crf', '20', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-r', '30', '-g', '30', '-bf', '0', '-profile:v', 'baseline', '-level', '3.0', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart');
 
   const outId = crypto.randomBytes(8).toString('hex');
   const outFile = outId + '.mp4';

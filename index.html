@@ -1234,7 +1234,7 @@ function applyFlip(){
 }
 
 function startCamera(){
-  var vc={facingMode:S.front?'user':'environment',width:{ideal:1920,max:2560},height:{ideal:1080,max:1440}};
+  var vc={facingMode:S.front?'user':'environment',width:{ideal:1920,max:2560},height:{ideal:1080,max:1440},frameRate:{ideal:30,max:30}};
   var ac={echoCancellation:true,noiseSuppression:true,autoGainControl:true};
   if(S.audioDeviceId){ac.deviceId={exact:S.audioDeviceId};}
   function wire(st){
@@ -1323,13 +1323,13 @@ function switchCamera(){
   if(S.recording||!S.stream)return;
   S.front=!S.front;
   var oldVid=S.stream.getVideoTracks(),aud=S.stream.getAudioTracks()[0];
-  var vc={facingMode:S.front?'user':'environment',width:{ideal:1920,max:2560},height:{ideal:1080,max:1440}};
+  var vc={facingMode:S.front?'user':'environment',width:{ideal:1920,max:2560},height:{ideal:1080,max:1440},frameRate:{ideal:30,max:30}};
   navigator.mediaDevices.getUserMedia({video:vc}).then(function(nst){
     var nt=nst.getVideoTracks()[0];
     S.stream=new MediaStream([nt,aud]);
     v.srcObject=S.stream;
     oldVid.forEach(function(t){t.stop()});
-    S.flipH=S.front?true:false;
+    S.flipH=false;
     applyFlip();
     return v.play().catch(function(){});
   }).catch(function(){toast('切换摄像头失败','bad')});
@@ -2389,7 +2389,7 @@ function teardownCam(){
   if(S.wakeLock){try{S.wakeLock.release()}catch(e){}S.wakeLock=null}
   lastWarn={};lowStart=null;lowLatch=false;
   S.zoom=1;$('zoomChip').textContent='1.0x';
-  S.front=true;S.flipH=true;S.flipV=false;applyFlip();
+  S.front=true;S.flipH=false;S.flipV=false;applyFlip();
   S.guides=true;$('guideBtn').style.opacity='1';
   S.brightBad=false;
   $('warnBright').classList.remove('on');
