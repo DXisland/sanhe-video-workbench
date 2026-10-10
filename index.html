@@ -710,6 +710,12 @@ if(/^https?:$/.test(location.protocol)&&SERVER_URL){
   if(location.hostname===SERVER_HOST){SAME_ORIGIN=true;SERVER_URL='';}
 }
 var apiBase=function(){return SAME_ORIGIN?'':SERVER_URL};
+/* 安全升级：https 页面下把任何 http 资源链接升级为 https，避免混合内容被拦截导致成品无法预览 */
+function secureUrl(u){
+  if(!u)return u;
+  if(location.protocol==='https:'&&/^http:\/\//i.test(u))return u.replace(/^http:\/\//i,'https://');
+  return u;
+}
 
 /* ==== 运行日志采集（多用户运维链路）==== */
 var LOG={user:'',sid:'',dev:'',buf:[],enabled:true};
@@ -2339,6 +2345,7 @@ function startSynthesis(){
       $('editSynthText').textContent='正在上传并云端合成... '+pct+'%';
     }).then(function(finalUrl){
       clearT();
+      finalUrl=secureUrl(finalUrl);
       LAST_SHOT.finalUrl=finalUrl;
       media.src=finalUrl;
       $('editSynthOverlay').classList.add('hide');
@@ -2868,6 +2875,7 @@ function loop(){
   });
   /* 保存面板：显示成片视频，提供「下载文件 / 浏览器打开 / 生成链接」三种方式 */
   function openSavePanel(videoUrl,fileName){
+    videoUrl=secureUrl(videoUrl);
     var sv=$('savePanelVideo');
     if(sv){sv.src=videoUrl;}
     var panel=$('savePanel');
