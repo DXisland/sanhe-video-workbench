@@ -1,0 +1,5 @@
+server/config.local.json
+server/data/
+node_modules/
+*.docx
+.DS_Store

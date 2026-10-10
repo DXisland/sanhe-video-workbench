@@ -433,9 +433,73 @@ async function handleCompose(req, res) {
 }
 
 
-/* ---------- 语音识别（字幕）：自托管 whisper.cpp，免费、不依赖第三方计费 ---------- */
+/* ---------- 语音识别（字幕）----------
+   优先用腾讯云 ASR（中文准、有免费额度、支持热词）；密钥从 config.local.json 或环境变量读取。
+   腾讯云不可用时回退自托管 whisper.cpp。 */
+let _localCfg = {};
+try { _localCfg = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.local.json'), 'utf8')); } catch (e) { /* 无本地配置 */ }
+const TENCENT_SECRET_ID = process.env.TENCENT_SECRET_ID || _localCfg.tencentSecretId || '';
+const TENCENT_SECRET_KEY = process.env.TENCENT_SECRET_KEY || _localCfg.tencentSecretKey || '';
+const TENCENT_ASR_SERVICE = 'asr';
+const TENCENT_ASR_REGION = process.env.TENCENT_ASR_REGION || 'ap-guangzhou';
+const TENCENT_ASR_HOST = 'asr.tencentcloudapi.com';
+
 const WHISPER_CLI = process.env.WHISPER_CLI || path.join(os.homedir(), 'whisper.cpp', 'build', 'bin', 'whisper-cli');
 const WHISPER_MODEL = process.env.WHISPER_MODEL || path.join(os.homedir(), 'whisper.cpp', 'models', 'ggml-small-q5_1.bin');
+
+function _sha256hex(s) { return crypto.createHash('sha256').update(s).digest('hex'); }
+function _hmac(key, s) { return crypto.createHmac('sha256', key).update(s).digest(); }
+
+function tencentRequest(action, payload) {
+  return new Promise((resolve, reject) => {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const date = new Date(timestamp * 1000).toISOString().slice(0, 10);
+    const body = JSON.stringify(payload);
+    const ct = 'application/json; charset=utf-8';
+    const canonicalHeaders = 'content-type:' + ct + '\nhost:' + TENCENT_ASR_HOST + '\n';
+    const signedHeaders = 'content-type;host';
+    const canonicalRequest = 'POST\n/\n\n' + canonicalHeaders + '\n' + signedHeaders + '\n' + _sha256hex(body);
+    const scope = date + '/' + TENCENT_ASR_SERVICE + '/tc3_request';
+    const sts = 'TC3-HMAC-SHA256\n' + timestamp + '\n' + scope + '\n' + _sha256hex(canonicalRequest);
+    const kDate = _hmac('TC3' + TENCENT_SECRET_KEY, date);
+    const kService = _hmac(kDate, TENCENT_ASR_SERVICE);
+    const kSigning = _hmac(kService, 'tc3_request');
+    const sig = crypto.createHmac('sha256', kSigning).update(sts).digest('hex');
+    const auth = 'TC3-HMAC-SHA256 Credential=' + TENCENT_SECRET_ID + '/' + scope + ', SignedHeaders=' + signedHeaders + ', Signature=' + sig;
+    const req = https.request({ host: TENCENT_ASR_HOST, path: '/', method: 'POST', headers: {
+      'Content-Type': ct, 'Host': TENCENT_ASR_HOST, 'Authorization': auth,
+      'X-TC-Action': action, 'X-TC-Version': '2019-06-14', 'X-TC-Timestamp': String(timestamp), 'X-TC-Region': TENCENT_ASR_REGION,
+    }}, (r) => {
+      let d = '';
+      r.on('data', (c) => (d += c));
+      r.on('end', () => { try { resolve(JSON.parse(d)); } catch (e) { reject(new Error(d || ('HTTP ' + r.statusCode))); } });
+    });
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+const _sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* 腾讯云录音文件识别：上传 base64 音频，异步轮询取结果 */
+async function tencentAsr(audioBuffer) {
+  const data = audioBuffer.toString('base64');
+  const r1 = await tencentRequest('CreateRecTask', { EngineModelType: '16k_zh', ChannelNum: 1, ResTextFormat: 3, SourceType: 1, Data: data });
+  if (r1.Response && r1.Response.Error) throw new Error('腾讯ASR: ' + r1.Response.Error.Message);
+  const taskId = r1.Response && r1.Response.Data && r1.Response.Data.TaskId;
+  if (!taskId) throw new Error('腾讯ASR: 未返回任务ID');
+  for (let i = 0; i < 60; i++) {
+    await _sleep(1000);
+    const r2 = await tencentRequest('DescribeTaskStatus', { TaskId: taskId });
+    const st = r2.Response && r2.Response.Data;
+    if (st && st.Status === 2) {
+      let text = String(st.Result || '').replace(/\[[^\]]*\]/g, ' ').replace(/\s+/g, ' ').trim();
+      return text;
+    }
+    if (st && st.Status === 3) throw new Error('腾讯ASR: ' + (st.ErrorMsg || '识别失败'));
+  }
+  throw new Error('腾讯ASR: 识别超时');
+}
 
 function handleAsr(req, res) {
   const tmp = path.join(config.dataDir, 'tmp', crypto.randomBytes(8).toString('hex'));
@@ -459,7 +523,9 @@ function handleAsr(req, res) {
   ws.on('error', (err) => { fs.unlink(rawPath, () => {}); sendJson(res, 500, { ok: false, error: err.message }); });
   ws.on('finish', () => {
     if (aborted) return;
-    if (!fs.existsSync(WHISPER_CLI) || !fs.existsSync(WHISPER_MODEL)) {
+    const canTencent = !!(TENCENT_SECRET_ID && TENCENT_SECRET_KEY);
+    const canWhisper = fs.existsSync(WHISPER_CLI) && fs.existsSync(WHISPER_MODEL);
+    if (!canTencent && !canWhisper) {
       cleanup();
       sendJson(res, 500, { ok: false, error: '语音识别服务未部署' });
       return;
@@ -469,17 +535,20 @@ function handleAsr(req, res) {
     runFfmpeg(['-y', '-fflags', '+genpts+discardcorrupt', '-i', rawPath, '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', wavPath])
       .then(() => {
         let wavSize = 0; try { wavSize = fs.statSync(wavPath).size; } catch (e) { /* 忽略 */ }
-        console.log('[asr] ffmpeg done, in=' + size + 'B wav=' + wavSize + 'B');
-        return new Promise((resolve, reject) => {
-          const child = spawn(WHISPER_CLI, ['-m', WHISPER_MODEL, '-f', wavPath, '-l', 'zh', '-np', '-otxt', '-of', outPrefix], { stdio: ['ignore', 'ignore', 'ignore'] });
-          const timer = setTimeout(() => { try { child.kill('SIGKILL'); } catch (e) { /* 忽略 */ } reject(new Error('识别超时')); }, 300000);
-          child.on('error', (e) => { clearTimeout(timer); reject(e); });
-          child.on('close', (code) => { clearTimeout(timer); code === 0 ? resolve() : reject(new Error('识别失败 code ' + code)); });
-        });
+        console.log('[asr] ffmpeg done, in=' + size + 'B wav=' + wavSize + 'B tencent=' + canTencent);
+        const wavBuf = fs.readFileSync(wavPath);
+        /* 优先腾讯云（Data 需 base64≤5MB，约对应 3.5MB wav），否则回退 whisper */
+        if (canTencent && wavSize > 0 && wavSize <= 3 * 1024 * 1024) {
+          return tencentAsr(wavBuf).catch((e) => {
+            console.log('[asr] tencent fail, fallback whisper: ' + e.message);
+            if (!canWhisper) throw e;
+            return whisperAsr(wavPath, outPrefix);
+          });
+        }
+        if (canWhisper) return whisperAsr(wavPath, outPrefix);
+        throw new Error('音频过大且无本地识别能力');
       })
-      .then(() => {
-        let text = '';
-        try { text = fs.readFileSync(outPrefix + '.txt', 'utf8').replace(/\s+/g, ' ').trim(); } catch (e) { /* 忽略 */ }
+      .then((text) => {
         console.log('[asr] in=' + size + 'B -> text(' + text.length + '): ' + (text ? text.slice(0, 40) : '<EMPTY>'));
         cleanup();
         sendJson(res, 200, { ok: true, text: text });
@@ -489,6 +558,22 @@ function handleAsr(req, res) {
         cleanup();
         sendJson(res, 200, { ok: true, text: '' });
       });
+  });
+}
+
+/* 自托管 whisper 转写（腾讯云不可用时的兜底） */
+function whisperAsr(wavPath, outPrefix) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(WHISPER_CLI, ['-m', WHISPER_MODEL, '-f', wavPath, '-l', 'zh', '-np', '-otxt', '-of', outPrefix], { stdio: ['ignore', 'ignore', 'ignore'] });
+    const timer = setTimeout(() => { try { child.kill('SIGKILL'); } catch (e) { /* 忽略 */ } reject(new Error('whisper 识别超时')); }, 300000);
+    child.on('error', (e) => { clearTimeout(timer); reject(e); });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (code !== 0) { reject(new Error('whisper 识别失败 code ' + code)); return; }
+      let text = '';
+      try { text = fs.readFileSync(outPrefix + '.txt', 'utf8').replace(/\s+/g, ' ').trim(); } catch (e) { /* 忽略 */ }
+      resolve(text);
+    });
   });
 }
 
