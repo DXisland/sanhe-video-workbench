@@ -214,7 +214,7 @@ body.no-nav .bottomnav{display:none}
 
 /* ===== 拍摄界面（深色取景 + 苹果风控件） ===== */
 #cam{position:fixed;inset:0;z-index:1;overflow:hidden;touch-action:none;background:#000}
-#video{position:absolute;left:50%;top:50%;width:100%;height:100%;object-fit:cover;background:transparent}
+#video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:transparent;transform-origin:center}
 #overlay{position:fixed;inset:0;width:100%;height:100%;z-index:2;pointer-events:none}
 
 #hud{position:fixed;top:0;left:0;right:0;z-index:4;padding:calc(env(safe-area-inset-top) + 10px) 12px 0}
@@ -1249,7 +1249,12 @@ function setZoom(z){
 function applyFlip(){
   /* 支持硬件变焦时不再叠加 CSS 缩放，避免双重放大 */
   var cssZoom=camZoomCaps()?1:S.zoom;
-  v.style.transform='translate(-50%,-50%) scaleX('+(S.flipH?-1:1)+') scaleY('+(S.flipV?-1:1)+') scale('+cssZoom+')';
+  /* 只有在需要翻转/缩放时才设置 transform，平时保持 none，避免 video 被强制提升合成层导致低端机掉帧 */
+  if(S.flipH||S.flipV||cssZoom!==1){
+    v.style.transform='scaleX('+(S.flipH?-1:1)+') scaleY('+(S.flipV?-1:1)+') scale('+cssZoom+')';
+  }else{
+    v.style.transform='none';
+  }
 }
 
 /* 摄像头光学/数码变焦：把默认焦距拉到最广，避免默认画面过度放大（特写） */
