@@ -1271,9 +1271,26 @@ function applyWidestCameraZoom(){
     sendLog('camera','info','应用最广焦距',{min:z.min,max:z.max});
   }catch(e){}
 }
+/* 预览帧率探针：用 requestVideoFrameCallback 统计实际呈现帧率并上报，用于定位卡顿来源 */
+function startFpsProbe(){
+  if(!v||typeof v.requestVideoFrameCallback!=='function')return;
+  var n=0,t0=0,lastLog=0;
+  var cb=function(now){
+    n++;
+    if(!t0)t0=now;
+    var dt=now-t0;
+    if(dt>=3000){
+      var fps=Math.round(n*1000/dt);
+      if(now-lastLog>5000){sendLog('camera','info','预览帧率',{fps:fps});flushLog();lastLog=now;}
+      n=0;t0=now;
+    }
+    v.requestVideoFrameCallback(cb);
+  };
+  try{v.requestVideoFrameCallback(cb);}catch(e){}
+}
 
 function startCamera(){
-  var vcFull={facingMode:S.front?'user':'environment',width:{ideal:2560,max:3840},height:{ideal:1920,max:2880},frameRate:{ideal:30,max:30}};
+  var vcFull={facingMode:S.front?'user':'environment',width:{ideal:1920,max:2560},height:{ideal:1440,max:1920}};
   var vcLite={facingMode:S.front?'user':'environment'};
   var ac={echoCancellation:true,noiseSuppression:true,autoGainControl:true};
   if(S.audioDeviceId){ac.deviceId={exact:S.audioDeviceId};}
@@ -1288,7 +1305,9 @@ function startCamera(){
       var gs=vt2.getSettings?vt2.getSettings():{};
       var cp=vt2.getCapabilities?vt2.getCapabilities():{};
       sendLog('camera','info','相机参数',{w:gs.width,h:gs.height,fr:gs.frameRate,zoomCaps:cp.zoom||null,dev:(gs.deviceId||'').slice(0,8)});
+      flushLog();
     }catch(e){}
+    startFpsProbe();
     applyWidestCameraZoom();
     return v.play().catch(function(){});
   }
@@ -1377,7 +1396,7 @@ function switchCamera(){
   if(S.recording||!S.stream)return;
   S.front=!S.front;
   var oldVid=S.stream.getVideoTracks(),aud=S.stream.getAudioTracks()[0];
-  var vc={facingMode:S.front?'user':'environment',width:{ideal:2560,max:3840},height:{ideal:1920,max:2880},frameRate:{ideal:30,max:30}};
+  var vc={facingMode:S.front?'user':'environment',width:{ideal:1920,max:2560},height:{ideal:1440,max:1920}};
   navigator.mediaDevices.getUserMedia({video:vc}).then(function(nst){
     var nt=nst.getVideoTracks()[0];
     S.stream=new MediaStream([nt,aud]);
@@ -1459,7 +1478,7 @@ function strokePath(c,fn,opt){
 
 var _ovSig='';
 function drawOverlay(){
-  var w=ov.clientWidth,h=ov.clientHeight,dpr=Math.min(window.devicePixelRatio||1,2);
+  var w=ov.clientWidth,h=ov.clientHeight,dpr=Math.min(window.devicePixelRatio||1,1.5);
   if(!w||!h)return;
   if(!S.camActive){_ovSig='';return;}
   /* 叠加层内容静止（仅网格/辅助线）时跳过重绘，避免每帧清屏+重绘拖垮主线程导致录制卡顿 */
@@ -3026,7 +3045,7 @@ function loop(){
   });
 })();
 requestAnimationFrame(loop);
-setInterval(function(){sampleBrightness();sampleAudio()},400);
+setInterval(function(){sampleBrightness();sampleAudio()},600);
 /* 嵌入模式：URL 加 ?embed=1 抹掉外部壳（标题栏/横幅/底部导航） */
 if(/embed=1|embed=true|bare=1/.test(location.search))document.body.classList.add('embed');
 routeFromHash();
