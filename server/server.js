@@ -364,10 +364,12 @@ async function handleCompose(req, res) {
   const ins = (Array.isArray(input.ins) ? input.ins : []).slice(0, 2);
   const bgmUrl = String(input.bgm || '');
   const subs = Array.isArray(input.subs) ? input.subs : [];
-  /* 输出尺寸：宽度固定 1080，高度按前端上报的手机屏幕比例（默认 1920），保证铺满屏幕 */
-  const OUT_W = 1080;
+  /* 输出尺寸：默认宽度固定 1080；前端上报手机屏幕物理分辨率时按屏幕宽高输出，保证铺满整屏 */
+  let OUT_W = parseInt(input.outW, 10);
+  if (!Number.isFinite(OUT_W) || OUT_W < 720 || OUT_W > 1440) OUT_W = 1080;
+  OUT_W = OUT_W - (OUT_W % 2);
   let OUT_H = parseInt(input.outH, 10);
-  if (!Number.isFinite(OUT_H) || OUT_H < 1200 || OUT_H > 2600) OUT_H = 1920;
+  if (!Number.isFinite(OUT_H) || OUT_H < 1200 || OUT_H > 3200) OUT_H = Math.round(OUT_W * 16 / 9);
   OUT_H = OUT_H - (OUT_H % 2);
   const mirrored = !!input.mirrored;
   const name = String(input.name || '');
@@ -424,7 +426,7 @@ async function handleCompose(req, res) {
 
   args.push('-filter_complex', fc.join(';'));
   args.push('-map', '[' + vLabel + ']', '-map', '[aout]');
-  args.push('-c:v', 'libx264', '-crf', '20', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-r', '30', '-g', '30', '-bf', '0', '-profile:v', 'high', '-level', '5.1', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart');
+  args.push('-c:v', 'libx264', '-crf', '20', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-r', '30', '-g', '30', '-bf', '0', '-profile:v', 'main', '-level', '5.0', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart');
 
   const outId = crypto.randomBytes(8).toString('hex');
   const outFile = outId + '.mp4';
