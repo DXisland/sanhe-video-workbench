@@ -464,21 +464,28 @@ function handleAsr(req, res) {
       sendJson(res, 500, { ok: false, error: '语音识别服务未部署' });
       return;
     }
-    /* 1) 用 ffmpeg 归一化为 16k 单声道 WAV（兼容 wav / webm / mp4 输入） */
-    runFfmpeg(['-y', '-i', rawPath, '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', wavPath])
-      .then(() => new Promise((resolve, reject) => {
-        const child = spawn(WHISPER_CLI, ['-m', WHISPER_MODEL, '-f', wavPath, '-l', 'zh', '-np', '-otxt', '-of', outPrefix], { stdio: ['ignore', 'ignore', 'ignore'] });
-        const timer = setTimeout(() => { try { child.kill('SIGKILL'); } catch (e) { /* 忽略 */ } reject(new Error('识别超时')); }, 300000);
-        child.on('error', (e) => { clearTimeout(timer); reject(e); });
-        child.on('close', (code) => { clearTimeout(timer); code === 0 ? resolve() : reject(new Error('识别失败 code ' + code)); });
-      }))
+    /* 1) 用 ffmpeg 归一化为 16k 单声道 WAV（兼容 wav / webm / mp4 输入）
+          MediaRecorder 的 webm 常缺 pts/时长信息，加 genpts+discardcorrupt 增强兼容 */
+    runFfmpeg(['-y', '-fflags', '+genpts+discardcorrupt', '-i', rawPath, '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', wavPath])
+      .then(() => {
+        let wavSize = 0; try { wavSize = fs.statSync(wavPath).size; } catch (e) { /* 忽略 */ }
+        console.log('[asr] ffmpeg done, in=' + size + 'B wav=' + wavSize + 'B');
+        return new Promise((resolve, reject) => {
+          const child = spawn(WHISPER_CLI, ['-m', WHISPER_MODEL, '-f', wavPath, '-l', 'zh', '-np', '-otxt', '-of', outPrefix], { stdio: ['ignore', 'ignore', 'ignore'] });
+          const timer = setTimeout(() => { try { child.kill('SIGKILL'); } catch (e) { /* 忽略 */ } reject(new Error('识别超时')); }, 300000);
+          child.on('error', (e) => { clearTimeout(timer); reject(e); });
+          child.on('close', (code) => { clearTimeout(timer); code === 0 ? resolve() : reject(new Error('识别失败 code ' + code)); });
+        });
+      })
       .then(() => {
         let text = '';
         try { text = fs.readFileSync(outPrefix + '.txt', 'utf8').replace(/\s+/g, ' ').trim(); } catch (e) { /* 忽略 */ }
+        console.log('[asr] in=' + size + 'B -> text(' + text.length + '): ' + (text ? text.slice(0, 40) : '<EMPTY>'));
         cleanup();
         sendJson(res, 200, { ok: true, text: text });
       })
-      .catch(() => {
+      .catch((e) => {
+        console.log('[asr] FAIL in=' + size + 'B err=' + (e && e.message));
         cleanup();
         sendJson(res, 200, { ok: true, text: '' });
       });
@@ -543,6 +550,181 @@ async function handleWxConfig(req, res, query) {
   }
 }
 
+/* ---------- 运行日志采集（多用户运维链路） ---------- */
+const logsDir = path.join(config.dataDir, 'logs');
+fs.mkdirSync(logsDir, { recursive: true });
+let logSeq = 0;
+let logBuffer = [];               // 内存环形缓冲，供看板快速读取
+const LOG_MAX = 4000;
+
+function clientIp(req) {
+  const xf = req.headers['x-forwarded-for'];
+  if (xf) return String(xf).split(',')[0].trim();
+  return req.socket && req.socket.remoteAddress ? req.socket.remoteAddress : '';
+}
+
+function appendLog(entry) {
+  logSeq += 1;
+  entry.seq = logSeq;
+  entry.ts = Date.now();
+  entry.ip = entry.ip || '';
+  logBuffer.push(entry);
+  if (logBuffer.length > LOG_MAX) logBuffer.shift();
+  /* 持久化到当日文件（追加） */
+  try {
+    const d = new Date(entry.ts);
+    const fname = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + '.jsonl';
+    fs.appendFileSync(path.join(logsDir, fname), JSON.stringify(entry) + '\n', 'utf8');
+  } catch (e) { /* 忽略磁盘写入失败 */ }
+}
+
+function sanitizeLog(o) {
+  const r = {
+    u: String(o.u || 'anon').slice(0, 60),
+    s: String(o.s || '').slice(0, 40),
+    d: String(o.d || '').slice(0, 220),
+    t: String(o.t || 'event').slice(0, 30),
+    l: String(o.l || 'info').slice(0, 10),
+    m: String(o.m || '').slice(0, 500),
+    e: o.e || null,
+  };
+  return r;
+}
+
+function handleLog(req, res) {
+  let body = '';
+  req.on('data', (c) => { body += c; if (body.length > 1024 * 1024) { req.destroy(); return; } });
+  req.on('end', () => {
+    const ip = clientIp(req);
+    let arr = null;
+    try {
+      const parsed = JSON.parse(body || '[]');
+      arr = Array.isArray(parsed) ? parsed : [parsed];
+    } catch (e) { arr = []; }
+    let n = 0;
+    for (const item of arr) {
+      if (!item || typeof item !== 'object') continue;
+      try { const e = sanitizeLog(item); e.ip = ip; appendLog(e); n += 1; } catch (e) { /* 忽略 */ }
+    }
+    sendJson(res, 200, { ok: true, n: n });
+  });
+}
+
+function todayKey(ts) {
+  const d = new Date(ts);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function handleGetLogs(req, res) {
+  const q = new URL(req.url, 'http://localhost').searchParams;
+  const since = parseInt(q.get('since') || '0', 10) || 0;
+  const user = (q.get('user') || '').trim();
+  const type = (q.get('type') || '').trim();
+  const level = (q.get('level') || '').trim();
+  const limit = Math.min(500, parseInt(q.get('limit') || '200', 10) || 200);
+  let logs = logBuffer.filter((x) => x.seq > since);
+  if (user) logs = logs.filter((x) => x.u === user);
+  if (type) logs = logs.filter((x) => x.t === type);
+  if (level) logs = logs.filter((x) => x.l === level);
+  logs = logs.slice(-limit);
+  /* 统计 */
+  const today = todayKey(Date.now());
+  const todayLogs = logBuffer.filter((x) => todayKey(x.ts) === today);
+  const users = new Set(todayLogs.map((x) => x.u));
+  const errs = todayLogs.filter((x) => x.l === 'error').length;
+  const warn = todayLogs.filter((x) => x.l === 'warn').length;
+  sendJson(res, 200, {
+    ok: true,
+    nowSeq: logSeq,
+    logs: logs,
+    stats: { totalToday: todayLogs.length, usersToday: users.size, errors: errs, warns: warn },
+    users: Array.from(new Set(logBuffer.map((x) => x.u))).slice(-200),
+    serverTime: Date.now(),
+  });
+}
+
+function adminPageHtml() {
+  return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>工具运行监控台</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f4f5f7;color:#222;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+header{background:#1f2430;color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+header h1{font-size:18px;margin:0}
+.meta{font-size:12px;color:#9aa3b2}
+.cards{display:flex;gap:12px;padding:16px 20px 0;flex-wrap:wrap}
+.card{background:#fff;border-radius:10px;padding:14px 18px;min-width:130px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.card .n{font-size:26px;font-weight:800}
+.card .n.err{color:#e5322d}.card .n.warn{color:#e88b00}.card .n.ok{color:#1a9e5c}
+.card .lab{font-size:12px;color:#888;margin-top:2px}
+.bar{display:flex;gap:10px;padding:12px 20px;align-items:center;flex-wrap:wrap}
+.bar select,.bar button{padding:7px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;background:#fff}
+.bar button.on{background:#1f2430;color:#fff;border-color:#1f2430}
+#list{padding:0 20px 30px}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+th,td{text-align:left;padding:9px 12px;font-size:12.5px;border-bottom:1px solid #f0f0f0;vertical-align:top}
+th{background:#fafbfc;color:#667;font-weight:600;position:sticky;top:0}
+tr.err td{background:#fff5f5}
+.tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600}
+.tag.info{background:#e8f0ff;color:#2e5bff}.tag.warn{background:#fff3e0;color:#e88b00}.tag.error{background:#ffe5e5;color:#e5322d}
+.tag.event{background:#eef2f6;color:#556}.tag.usage{background:#e6f7ef;color:#1a9e5c}
+.mono{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#888;word-break:break-all}
+.u{font-weight:700}
+</style></head><body>
+<header><h1>门店短视频 · 运行监控台</h1><span class="meta" id="clock">—</span></header>
+<div class="cards">
+ <div class="card"><div class="n ok" id="st_total">0</div><div class="lab">今日事件</div></div>
+ <div class="card"><div class="n" id="st_users">0</div><div class="lab">今日活跃用户</div></div>
+ <div class="card"><div class="n warn" id="st_warn">0</div><div class="lab">今日告警</div></div>
+ <div class="card"><div class="n err" id="st_err">0</div><div class="lab">今日错误</div></div>
+</div>
+<div class="bar">
+ <select id="f_user"><option value="">全部用户</option></select>
+ <select id="f_type"><option value="">全部类型</option></select>
+ <select id="f_level"><option value="">全部级别</option><option value="info">info</option><option value="warn">warn</option><option value="error">error</option></select>
+ <button id="btn_pause">⏸ 暂停刷新</button>
+ <button onclick="location.reload()">刷新</button>
+ <span class="meta" id="status">连接中…</span>
+</div>
+<div id="list"><table><thead><tr><th>时间</th><th>用户</th><th>类型</th><th>级别</th><th>内容</th><th>设备/会话</th></tr></thead><tbody id="tbody"></tbody></table></div>
+<script>
+var lastSeq=0, paused=false, types={};
+function ts(t){var d=new Date(t);function p(n){return (n<10?'0':'')+n}return p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());}
+function esc(s){return String(s||'').replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})}
+function render(stats,users,logs){
+ if(stats){document.getElementById('st_total').textContent=stats.totalToday;document.getElementById('st_users').textContent=stats.usersToday;document.getElementById('st_warn').textContent=stats.warns;document.getElementById('st_err').textContent=stats.errors;}
+ var su=document.getElementById('f_user'); var cur=su.value;
+ var opts='<option value="">全部用户</option>'; users.forEach(function(u){opts+='<option'+(u===cur?' selected':'')+'>'+esc(u)+'</option>'}); su.innerHTML=opts;
+ var tb=document.getElementById('tbody'); var rows='';
+ logs.forEach(function(l){
+   var typ=l.t||'event'; if(!types[typ]){types[typ]=1; var so=document.getElementById('f_type'); var o=document.createElement('option'); o.value=typ; o.textContent=typ; so.appendChild(o);}
+   rows+='<tr class="'+(l.l==='error'?'err':'')+'"><td class="mono">'+ts(l.ts)+'</td><td class="u">'+esc(l.u)+'</td><td><span class="tag '+esc(l.t||'event')+'">'+esc(l.t||'event')+'</span></td><td><span class="tag '+(l.l==='error'?'error':l.l==='warn'?'warn':(l.t==='usage'?'usage':'info'))+'">'+esc(l.l||'info')+'</span></td><td>'+esc(l.m)+'</td><td class="mono">'+esc(l.d||'')+'<br><span style="color:#bbb">'+esc(l.s||'')+'</span></td></tr>';
+ });
+ tb.innerHTML=rows;
+}
+function fetchLogs(since){
+ var qs='since='+since+'&limit=300';
+ var u=document.getElementById('f_user').value; if(u)qs+='&user='+encodeURIComponent(u);
+ var t=document.getElementById('f_type').value; if(t)qs+='&type='+encodeURIComponent(t);
+ var lv=document.getElementById('f_level').value; if(lv)qs+='&level='+encodeURIComponent(lv);
+ fetch('/api/logs?'+qs).then(function(r){return r.json()}).then(function(d){
+   if(!d.ok){return;}
+   if(since===0||!paused){ if(d.logs.length)lastSeq=d.nowSeq; }
+   else{ if(d.logs.length)lastSeq=Math.max(lastSeq,d.logs[0].seq-1); }
+   render(d.stats,d.users,d.logs);
+   document.getElementById('status').textContent='已更新 '+ts(d.serverTime)+'（共 '+d.stats.totalToday+' 事件）';
+ }).catch(function(){document.getElementById('status').textContent='连接失败，重试中…'});
+}
+function poll(){ if(paused){setTimeout(poll,1500);return;} fetchLogs(lastSeq); setTimeout(poll,4000); }
+document.getElementById('f_user').onchange=function(){lastSeq=0;fetchLogs(0)};
+document.getElementById('f_type').onchange=function(){lastSeq=0;fetchLogs(0)};
+document.getElementById('f_level').onchange=function(){lastSeq=0;fetchLogs(0)};
+document.getElementById('btn_pause').onclick=function(){paused=!paused;this.textContent=paused?'▶ 继续刷新':'⏸ 暂停刷新';this.classList.toggle('on',paused)};
+setInterval(function(){document.getElementById('clock').textContent=ts(Date.now())},1000);
+fetchLogs(0); poll();
+</script></body></html>`;
+}
+
 /* ---------- 路由 ---------- */
 const server = http.createServer((req, res) => {
   const parsed = new URL(req.url, 'http://localhost');
@@ -566,6 +748,19 @@ const server = http.createServer((req, res) => {
   }
   if (req.method === 'POST' && pathname === '/api/asr') {
     handleAsr(req, res);
+    return;
+  }
+  if (req.method === 'POST' && pathname === '/api/log') {
+    handleLog(req, res);
+    return;
+  }
+  if (req.method === 'GET' && pathname === '/api/logs') {
+    handleGetLogs(req, res);
+    return;
+  }
+  if (req.method === 'GET' && pathname === '/admin') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(adminPageHtml());
     return;
   }
   if (pathname.startsWith('/v/')) {

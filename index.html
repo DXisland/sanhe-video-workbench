@@ -711,6 +711,66 @@ if(/^https?:$/.test(location.protocol)&&SERVER_URL){
 }
 var apiBase=function(){return SAME_ORIGIN?'':SERVER_URL};
 
+/* ==== 运行日志采集（多用户运维链路）==== */
+var LOG={user:'',sid:'',dev:'',buf:[],enabled:true};
+function detectUser(){
+  try{
+    var qs=location.search||'';
+    var m=/[?&](user|uid|name)=([^&]+)/.exec(qs);
+    if(m&&m[2])return decodeURIComponent(m[2]);
+    var ls=localStorage.getItem('kz_user_id');
+    if(ls)return ls;
+    var anon='anon_'+Math.random().toString(36).slice(2,8);
+    try{localStorage.setItem('kz_user_id',anon)}catch(e){}
+    return anon;
+  }catch(e){return 'anon';}
+}
+function flushLog(){
+  if(!LOG.buf.length)return;
+  var batch=LOG.buf;LOG.buf=[];
+  try{
+    var blob=new Blob([JSON.stringify(batch)],{type:'application/json'});
+    if(navigator.sendBeacon){
+      navigator.sendBeacon(apiBase()+'/api/log',blob);
+    }else{
+      var xhr=new XMLHttpRequest();
+      xhr.open('POST',apiBase()+'/api/log',false);
+      xhr.setRequestHeader('Content-Type','application/json');
+      try{xhr.send(blob)}catch(e){}
+    }
+  }catch(e){}
+}
+function sendLog(type,level,msg,extra){
+  if(!LOG.enabled)return;
+  try{
+    LOG.buf.push({u:LOG.user,s:LOG.sid,d:LOG.dev,t:type,l:level||'info',m:msg||'',e:extra||null});
+    if(LOG.buf.length>=8)flushLog();
+  }catch(e){}
+}
+function initLog(){
+  try{
+    LOG.user=detectUser();
+    LOG.sid=Math.random().toString(36).slice(2,10);
+    LOG.dev=(navigator.userAgent||'')+' | '+((typeof screen!=='undefined')?(screen.width+'x'+screen.height):'')+' | '+(location.hostname||'');
+  }catch(e){}
+  if(window.addEventListener){
+    window.addEventListener('pagehide',flushLog);
+    window.addEventListener('beforeunload',flushLog);
+  }
+  setInterval(flushLog,5000);
+  sendLog('usage','info','页面打开',{page:location.pathname,ref:document.referrer||''});
+}
+initLog();
+/* 全局错误上报 */
+if(window.addEventListener){
+  window.addEventListener('error',function(e){
+    try{sendLog('error','error','JS错误: '+(e.message||e.type)+' @'+(e.filename||'')+':'+(e.lineno||0));}catch(_){}
+  });
+  window.addEventListener('unhandledrejection',function(e){
+    try{sendLog('error','error','未处理Promise错误: '+((e.reason&&e.reason.message)||e.reason));}catch(_){}
+  });
+}
+
 /* ==== ES5 兼容层（旧 Android WebView 兼容，避免整段脚本因 ES6 语法解析失败） ==== */
 if(!Array.prototype.find)Array.prototype.find=function(fn){for(var i=0;i<this.length;i++){if(fn(this[i],i,this))return this[i]}return undefined};
 if(!String.prototype.startsWith)String.prototype.startsWith=function(s){return this.indexOf(s)===0};
@@ -1189,6 +1249,7 @@ function startCamera(){
     /* 音频获取失败（常见于耳机/蓝牙占用麦克风）：回退仅视频，仍可拍摄 */
     return navigator.mediaDevices.getUserMedia({video:vc}).then(function(st){
       toast('未检测到可用麦克风：视频将没有声音，请拔掉耳机或检查权限','warn');
+      sendLog('camera','warn','未检测到麦克风，回退仅视频');
       return wire(st);
     });
   });
@@ -1480,6 +1541,7 @@ function doStartRecord(){
   S.recorder.onstop=onRecordStop;
   S.recorder.start(500);
   S.recording=true;S.recStart=Date.now();
+  sendLog('record','info','开始录制');
   S.recTimer=setInterval(function(){
     var s=Math.floor((Date.now()-S.recStart)/1000);
     $('timerTxt').textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
@@ -1512,6 +1574,7 @@ function onRecordStop(){
   if(blob.size<1024){toast('录像失败，请重试','bad');return}
   /* 记录是否为前置镜像：合成阶段需要统一翻回（保持输出与预览一致） */
   S.recMirrored=!!S.flipH;
+  sendLog('record','info','录制完成 '+(S.recDur||0).toFixed(1)+'s '+S.recMime,{size:blob.size});
   showSheet('video',blob);
   if(S.recMime.indexOf('webm')>=0)toast('当前为 WebM 格式，上传抖音前可能需要转成 MP4','warn');
 }
@@ -1547,11 +1610,13 @@ function showSheet(kind,blob){
   $('toEditBtn').onclick=function(){
     LAST_SHOT={kind:kind,blob:blob,url:url,duration:(kind==='video'?S.recDur:0)||0,mirrored:(kind==='video'?!!S.recMirrored:false)};
     closeSheet();
+    sendLog('edit','info','进入剪辑台',{kind:kind});
     try{
       switchView('edit');
       toast('素材已带入剪辑台','good');
     }catch(e){
       toast('进入剪辑失败：'+(e&&e.message||e),'bad');
+      sendLog('edit','error','进入剪辑失败 '+(e&&e.message||e));
     }
   };
   $('sheetClose').onclick=closeSheet;
@@ -1885,6 +1950,7 @@ function updateStepBtns(){
 function triggerSubtitleGen(){
   var stepBtn=$('stepSubtitle');
   if(stepBtn)stepBtn.disabled=true;
+  sendLog('subtitle','info','开始生成字幕');
   var overlay=document.createElement('div');
   overlay.id='subGenOverlay';
   overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;';
@@ -1900,8 +1966,9 @@ function triggerSubtitleGen(){
     var ov=document.getElementById('subGenOverlay');if(ov)ov.remove();
     if(style.parentNode)style.remove();
     if(stepBtn)stepBtn.disabled=false;
-    if(!lines||!lines.length){toast('未识别到语音内容：请确认拍摄时说话清晰、环境安静，再试一次','warn');return;}
+    if(!lines||!lines.length){toast('未识别到语音内容：请确认拍摄时说话清晰、环境安静，再试一次','warn');sendLog('subtitle','error','未识别到语音内容');return;}
     generateSubtitleLines(lines);
+    sendLog('subtitle','info','字幕生成成功 '+lines.length+'段');
   });
 }
 function generateSubtitleLines(lines){
@@ -2061,16 +2128,27 @@ function audioBufferToWav(buffer){
 }
 function callSenseVoice(fileBlob,filename,cb){
   /* 语音识别改由服务器自托管 whisper 完成，免费且不依赖第三方计费 */
+  var url=apiBase()+'/api/asr';
   var xhr=new XMLHttpRequest();
-  xhr.open('POST',apiBase()+'/api/asr',true);
+  xhr.open('POST',url,true);
   xhr.setRequestHeader('Content-Type','application/octet-stream');
   xhr.timeout=300000;
   xhr.onload=function(){
     var d=null;try{d=JSON.parse(xhr.responseText)}catch(e){}
+    if(!(d&&d.text)){toast('识别服务返回为空（HTTP '+xhr.status+'），已尽力识别','warn');sendLog('asr','warn','识别返回为空 HTTP '+xhr.status,{size:fileBlob&&fileBlob.size});}
+    else{sendLog('asr','info','识别成功 '+d.text.length+'字',{size:fileBlob&&fileBlob.size});}
     cb&&cb((d&&d.text)||'');
   };
-  xhr.onerror=function(){cb&&cb('')};
-  xhr.ontimeout=function(){cb&&cb('')};
+  xhr.onerror=function(){
+    var reason='网络错误';
+    if(location.protocol==='https:'&&url.indexOf('http://')===0){
+      reason='页面HTTPS后端HTTP被混合内容拦截';
+    }
+    toast('字幕识别失败：'+reason,'warn');
+    sendLog('asr','error','字幕识别失败：'+reason,{url:url,size:fileBlob&&fileBlob.size});
+    cb&&cb('');
+  };
+  xhr.ontimeout=function(){toast('字幕识别超时（网络慢或视频较长）','warn');sendLog('asr','error','字幕识别超时',{size:fileBlob&&fileBlob.size});cb&&cb('');};
   xhr.send(fileBlob);
 }
 /* 无VAD时的默认拆分：按所有常见标点拆成多段 */
@@ -2251,6 +2329,7 @@ function startSynthesis(){
     }
   },300000);
   var clearT=function(){if(synthTimeout)clearTimeout(synthTimeout)};
+  sendLog('compose','info','开始云端合成',{ins:EDIT_PLAN.inserts.length,bgm:!!EDIT_PLAN.bgm});
   try{
     composeFinalClip(LAST_SHOT,segs,info,EDIT_PLAN,function(prog){
       var pct=Math.round(prog*100);
@@ -2267,6 +2346,7 @@ function startSynthesis(){
       editState='done';
       $('editShotInfo').textContent='成片已合成 ✅ 下一步：点「保存视频」按提示保存';
       toast('成片合成完成','good');
+      sendLog('compose','info','合成成功');
     }).catch(function(err){
       clearT();
       $('editSynthOverlay').classList.add('hide');
@@ -2276,6 +2356,7 @@ function startSynthesis(){
       editState='ready';
       $('editShotInfo').textContent='合成失败，请重试：'+(err.message||err);
       toast('合成失败，请重试','warn');
+      sendLog('compose','error','合成失败：'+(err.message||err));
     });
   }catch(e){
     clearT();
@@ -2286,6 +2367,7 @@ function startSynthesis(){
     editState='ready';
     $('editShotInfo').textContent='合成出错：'+(e.message||e);
     toast('合成出错，请重试','warn');
+    sendLog('compose','error','合成出错：'+(e.message||e));
   }
 }
 function teardownCam(){
@@ -2426,8 +2508,8 @@ function uploadBinary(url, blob, onProgress, timeoutMs){
       var d=null;try{d=JSON.parse(xhr.responseText)}catch(e){}
       if(d&&d.url)resolve(d);else reject(new Error((d&&d.error)||('上传失败 HTTP '+xhr.status)));
     };
-    xhr.onerror=function(){reject(new Error('上传网络错误'))};
-    xhr.ontimeout=function(){reject(new Error('上传超时'))};
+    xhr.onerror=function(){var r='上传网络错误';if(location.protocol==='https:'&&url.indexOf('http://')===0)r='上传被混合内容拦截';sendLog('upload','error',r,{size:blob&&blob.size});reject(new Error(r))};
+    xhr.ontimeout=function(){sendLog('upload','error','上传超时',{size:blob&&blob.size});reject(new Error('上传超时'))};
     xhr.send(blob);
   });
 }
@@ -2442,8 +2524,8 @@ function postJson(url, body, timeoutMs){
       var d=null;try{d=JSON.parse(xhr.responseText)}catch(e){}
       if(d&&d.url)resolve(d);else reject(new Error((d&&d.error)||('合成失败 HTTP '+xhr.status)));
     };
-    xhr.onerror=function(){reject(new Error('合成网络错误'))};
-    xhr.ontimeout=function(){reject(new Error('合成超时'))};
+    xhr.onerror=function(){var r='合成网络错误';if(location.protocol==='https:'&&url.indexOf('http://')===0)r='合成被混合内容拦截';sendLog('compose','error',r);reject(new Error(r))};
+    xhr.ontimeout=function(){sendLog('compose','error','合成超时');reject(new Error('合成超时'))};
     xhr.send(body);
   });
 }
@@ -2810,6 +2892,7 @@ function loop(){
         a.style.display='none';document.body.appendChild(a);a.click();
         setTimeout(function(){a.remove()},500);
         toast('已开始下载，请在下载列表查看','good');
+        sendLog('save','info','下载文件');
       };
     }
     /* 生成链接：成片已在云端，直接复制链接即可 */
@@ -2821,6 +2904,7 @@ function loop(){
         if(lt)lt.value=videoUrl;
         copyText(videoUrl);
         toast('链接已复制，粘贴到微信/企业微信发送即可','good');
+        sendLog('save','info','生成链接');
       };
     }
     var linkCopyBtn=$('savePanelLinkCopy');
@@ -2831,6 +2915,7 @@ function loop(){
     var shareBtn=$('savePanelShare');
     if(shareBtn){
       shareBtn.onclick=function(){
+        sendLog('save','info','分享视频');
         if(navigator.share){
           try{
             var p=navigator.share({title:'短视频成片',text:fileName,url:videoUrl});
