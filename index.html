@@ -1240,7 +1240,8 @@ function applyFlip(){
 }
 
 function startCamera(){
-  var vc={facingMode:S.front?'user':'environment',width:{ideal:1440,max:1920},height:{ideal:2560,max:2880},frameRate:{ideal:30,max:30}};
+  var vcFull={facingMode:S.front?'user':'environment',width:{ideal:1440,max:1920},height:{ideal:2560,max:2880},frameRate:{ideal:30,max:30}};
+  var vcLite={facingMode:S.front?'user':'environment'};
   var ac={echoCancellation:true,noiseSuppression:true,autoGainControl:true};
   if(S.audioDeviceId){ac.deviceId={exact:S.audioDeviceId};}
   function wire(st){
@@ -1251,14 +1252,21 @@ function startCamera(){
     v.setAttribute('playsinline','');
     return v.play().catch(function(){});
   }
-  return navigator.mediaDevices.getUserMedia({video:vc,audio:ac}).then(wire).catch(function(){
-    /* 音频获取失败（常见于耳机/蓝牙占用麦克风）：回退仅视频，仍可拍摄 */
-    return navigator.mediaDevices.getUserMedia({video:vc}).then(function(st){
-      toast('未检测到可用麦克风：视频将没有声音，请拔掉耳机或检查权限','warn');
-      sendLog('camera','warn','未检测到麦克风，回退仅视频');
-      return wire(st);
+  function getStream(vc){
+    return navigator.mediaDevices.getUserMedia({video:vc,audio:ac}).catch(function(){
+      /* 音频获取失败（常见于耳机/蓝牙占用麦克风）：回退仅视频，仍可拍摄 */
+      return navigator.mediaDevices.getUserMedia({video:vc}).then(function(st){
+        toast('未检测到可用麦克风：视频将没有声音，请拔掉耳机或检查权限','warn');
+        sendLog('camera','warn','未检测到麦克风，回退仅视频');
+        return st;
+      });
     });
-  });
+  }
+  return getStream(vcFull).catch(function(){
+    /* 高分辨率竖屏约束不被部分设备支持：回退默认约束，保证仍能拍摄 */
+    sendLog('camera','warn','高分辨率约束失败，回退默认约束');
+    return getStream(vcLite);
+  }).then(wire);
 }
 function initAudio(){
   try{
