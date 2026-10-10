@@ -1457,10 +1457,15 @@ function strokePath(c,fn,opt){
   c.restore();
 }
 
+var _ovSig='';
 function drawOverlay(){
-  var w=ov.clientWidth,h=ov.clientHeight,dpr=window.devicePixelRatio||1;
+  var w=ov.clientWidth,h=ov.clientHeight,dpr=Math.min(window.devicePixelRatio||1,2);
   if(!w||!h)return;
-  if(!S.camActive)return;
+  if(!S.camActive){_ovSig='';return;}
+  /* 叠加层内容静止（仅网格/辅助线）时跳过重绘，避免每帧清屏+重绘拖垮主线程导致录制卡顿 */
+  var sig=S.mode+'|'+(S.guides?1:0)+'|'+w+'x'+h+'@'+dpr;
+  if(sig===_ovSig)return;
+  _ovSig=sig;
   /* 仅在尺寸变化时重设画布：每帧重设 canvas.width/height 会强制重分配+清屏，导致录制严重卡顿 */
   var nw=Math.round(w*dpr),nh=Math.round(h*dpr);
   if(ov.width!==nw||ov.height!==nh){ov.width=nw;ov.height=nh;}
@@ -1550,7 +1555,8 @@ function buildRecordStream(){
   return {stream:out,clean:function(){cancelAnimationFrame(raf);vt.stop()}};
 }
 function pickMime(){
-  var cands=['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4','video/webm;codecs=vp8,opus','video/webm;codecs=vp9,opus','video/webm'];
+  /* 首选更高等级的 H.264（baseline 3.0 对高分辨率不友好，可能拖慢编码器） */
+  var cands=['video/mp4;codecs=avc1.640028,mp4a.40.2','video/mp4;codecs=avc1.4d0028,mp4a.40.2','video/mp4','video/webm;codecs=vp8,opus','video/webm;codecs=vp9,opus','video/webm'];
   for(var i=0;i<cands.length;i++)if(window.MediaRecorder&&MediaRecorder.isTypeSupported(cands[i]))return cands[i];
   return '';
 }
@@ -3020,7 +3026,7 @@ function loop(){
   });
 })();
 requestAnimationFrame(loop);
-setInterval(function(){sampleBrightness();sampleAudio()},200);
+setInterval(function(){sampleBrightness();sampleAudio()},400);
 /* 嵌入模式：URL 加 ?embed=1 抹掉外部壳（标题栏/横幅/底部导航） */
 if(/embed=1|embed=true|bare=1/.test(location.search))document.body.classList.add('embed');
 routeFromHash();
