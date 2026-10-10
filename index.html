@@ -1283,6 +1283,12 @@ function startCamera(){
     v.muted=true;
     v.playsInline=true;
     v.setAttribute('playsinline','');
+    try{
+      var vt2=st.getVideoTracks()[0];
+      var gs=vt2.getSettings?vt2.getSettings():{};
+      var cp=vt2.getCapabilities?vt2.getCapabilities():{};
+      sendLog('camera','info','相机参数',{w:gs.width,h:gs.height,fr:gs.frameRate,zoomCaps:cp.zoom||null,dev:(gs.deviceId||'').slice(0,8)});
+    }catch(e){}
     applyWidestCameraZoom();
     return v.play().catch(function(){});
   }
