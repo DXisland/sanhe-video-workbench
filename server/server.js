@@ -312,7 +312,8 @@ function assTime(t) {
   return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0') + '.' + String(cs).padStart(2, '0');
 }
 const SUBTITLE_KEYWORDS = ['价格', '元', '折', '优惠', '活动', '限时', '现货', '包邮', '特价', '最低', '抢购', '秒杀', '直降', '立减', '促销', '折扣', '全场', '买', '送', '免费'];
-function buildAss(subs) {
+function buildAss(subs, w, h) {
+  const W = w || 1080, H = h || 1920;
   let events = '';
   for (const s of subs) {
     const text = String(s.text || '').replace(/[{}]/g, '').replace(/,/g, '，').replace(/\\/g, '');
@@ -324,8 +325,8 @@ function buildAss(subs) {
   }
   return `[Script Info]
 ScriptType: v4.00+
-PlayResX: 1080
-PlayResY: 1920
+PlayResX: ${W}
+PlayResY: ${H}
 ScaledBorderAndShadow: yes
 
 [V4+ Styles]
@@ -363,6 +364,11 @@ async function handleCompose(req, res) {
   const ins = (Array.isArray(input.ins) ? input.ins : []).slice(0, 2);
   const bgmUrl = String(input.bgm || '');
   const subs = Array.isArray(input.subs) ? input.subs : [];
+  /* 输出尺寸：宽度固定 1080，高度按前端上报的手机屏幕比例（默认 1920），保证铺满屏幕 */
+  const OUT_W = 1080;
+  let OUT_H = parseInt(input.outH, 10);
+  if (!Number.isFinite(OUT_H) || OUT_H < 1200 || OUT_H > 2600) OUT_H = 1920;
+  OUT_H = OUT_H - (OUT_H % 2);
   const mirrored = !!input.mirrored;
   const name = String(input.name || '');
 
@@ -390,18 +396,18 @@ async function handleCompose(req, res) {
   /* 视频滤镜：主视频 9:16 裁剪，镜像翻转，穿插素材整屏替换，字幕烧录 */
   const fc = [];
   let last = 'm0';
-  fc.push('[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1' + (mirrored ? ',hflip' : '') + '[m0]');
+  fc.push('[0:v]scale=' + OUT_W + ':' + OUT_H + ':force_original_aspect_ratio=increase,crop=' + OUT_W + ':' + OUT_H + ',setsar=1' + (mirrored ? ',hflip' : '') + '[m0]');
   for (let i = 0; i < insFiles.length; i++) {
     const inp = (i + 1) + ':v';
     const st = insFiles[i].start, en = st + insFiles[i].dur;
-    fc.push('[' + inp + ']scale=1080:1920,setsar=1[i' + i + ']');
+    fc.push('[' + inp + ']scale=' + OUT_W + ':' + OUT_H + ',setsar=1[i' + i + ']');
     fc.push('[' + last + '][i' + i + ']overlay=0:0:enable=\'between(t,' + st.toFixed(3) + ',' + en.toFixed(3) + ')\':eof_action=pass[m' + (i + 1) + ']');
     last = 'm' + (i + 1);
   }
   let vLabel = last;
   if (subs.length) {
     const assPath = path.join(tmpDir, 'subs.ass');
-    fs.writeFileSync(assPath, buildAss(subs), 'utf8');
+    fs.writeFileSync(assPath, buildAss(subs, OUT_W, OUT_H), 'utf8');
     fc.push('[' + last + ']subtitles=' + assPath + '[vout]');
     vLabel = 'vout';
   }

@@ -367,7 +367,7 @@ body.no-nav .bottomnav{display:none}
         <span class="harrow">›</span>
       </div>
     </div>
-    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v4.0 · 2026-10-10 15:30</span></div>
+    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v4.1 · 2026-10-10 16:30</span></div>
   </div>
 
   <!-- 底部导航：历史记录 / 门店短视频（当前） / 门店直播 -->
@@ -720,6 +720,8 @@ function secureUrl(u){
   if(location.protocol==='https:'&&/^http:\/\//i.test(u))return u.replace(/^http:\/\//i,'https://');
   return u;
 }
+/* 微信/企业微信内置浏览器（安卓 X5 / iOS WKWebView）渲染摄像头性能差，走轻量模式 */
+var IS_WX=/micromessenger|wxwork/i.test(navigator.userAgent||'');
 
 /* ==== 运行日志采集（多用户运维链路）==== */
 var LOG={user:'',sid:'',dev:'',buf:[],enabled:true};
@@ -1307,7 +1309,8 @@ function startFpsProbe(){
 }
 
 function startCamera(){
-  var vcFull={facingMode:S.front?'user':'environment',width:{ideal:1920,max:2560},height:{ideal:1440,max:1920}};
+  var vcFull=IS_WX?{facingMode:S.front?'user':'environment',width:{ideal:1280,max:1280},height:{ideal:960,max:960}}
+                  :{facingMode:S.front?'user':'environment',width:{ideal:1920,max:2560},height:{ideal:1440,max:1920}};
   var vcLite={facingMode:S.front?'user':'environment'};
   var ac={echoCancellation:true,noiseSuppression:true,autoGainControl:true};
   if(S.audioDeviceId){ac.deviceId={exact:S.audioDeviceId};}
@@ -1415,7 +1418,8 @@ function switchCamera(){
   if(S.recording||!S.stream)return;
   S.front=!S.front;
   var oldVid=S.stream.getVideoTracks(),aud=S.stream.getAudioTracks()[0];
-  var vc={facingMode:S.front?'user':'environment',width:{ideal:1920,max:2560},height:{ideal:1440,max:1920}};
+  var vc=IS_WX?{facingMode:S.front?'user':'environment',width:{ideal:1280,max:1280},height:{ideal:960,max:960}}
+              :{facingMode:S.front?'user':'environment',width:{ideal:1920,max:2560},height:{ideal:1440,max:1920}};
   navigator.mediaDevices.getUserMedia({video:vc}).then(function(nst){
     var nt=nst.getVideoTracks()[0];
     S.stream=new MediaStream([nt,aud]);
@@ -1497,6 +1501,7 @@ function strokePath(c,fn,opt){
 
 var _ovSig='';
 function drawOverlay(){
+  if(IS_WX)return; /* 微信/企业微信内置浏览器：跳过叠加层，避免 canvas 叠加 video 造成软件合成掉帧 */
   var w=ov.clientWidth,h=ov.clientHeight,dpr=Math.min(window.devicePixelRatio||1,1.5);
   if(!w||!h)return;
   if(!S.camActive){_ovSig='';return;}
@@ -2383,6 +2388,8 @@ function renderEdit(){
     media=$('editPreviewMedia');
   }
   media.src=LAST_SHOT.url;
+  /* 原始录制流在微信内是镜像的：按同一镜像参数显示，保证与最终成片一致 */
+  media.style.transform=S.flipH?'scaleX(-1)':'none';
   media.setAttribute('playsinline','');
   $('matPanel').classList.add('hide');
   $('editSynthOverlay').classList.add('hide');
@@ -2441,6 +2448,7 @@ function startSynthesis(){
       finalUrl=secureUrl(finalUrl);
       LAST_SHOT.finalUrl=finalUrl;
       media.src=finalUrl;
+      media.style.transform='none';
       $('editSynthOverlay').classList.add('hide');
       $('editSynthStatus').classList.add('hide');
       $('editSynthesizeBtn').disabled=false;
@@ -2491,7 +2499,7 @@ function teardownCam(){
   if(S.wakeLock){try{S.wakeLock.release()}catch(e){}S.wakeLock=null}
   lastWarn={};lowStart=null;lowLatch=false;
   S.zoom=1;$('zoomChip').textContent='1.0x';
-  S.front=true;S.flipH=false;S.flipV=false;applyFlip();
+  S.front=true;S.flipH=IS_WX;S.flipV=false;applyFlip();
   S.guides=true;$('guideBtn').style.opacity='1';
   S.brightBad=false;
   $('warnBright').classList.remove('on');
@@ -2693,6 +2701,13 @@ function composeFinalClip(clip, segments, scriptInfo, plan, onProgress){
 
     var name='成片_'+new Date().toLocaleString('zh-CN',{hour12:false}).replace(/[/:\s]/g,'-');
     var ext=(clip.blob.type||'').indexOf('mp4')>=0?'mp4':'webm';
+    /* 成片高度按手机屏幕比例输出，保证铺满整屏（宽度固定1080） */
+    var outH=1920;
+    try{
+      var scrAsp=(window.innerHeight&&window.innerWidth)?(window.innerHeight/window.innerWidth):(16/9);
+      scrAsp=Math.min(2.4,Math.max(16/9,scrAsp));
+      outH=Math.round(1080*scrAsp/2)*2;
+    }catch(e){}
     var progress=0;
     var tick=null;
     uploadBinary(apiBase()+'/api/upload?ext='+ext+'&name='+encodeURIComponent(name+'.'+ext), clip.blob, function(p){
@@ -2701,7 +2716,7 @@ function composeFinalClip(clip, segments, scriptInfo, plan, onProgress){
     }).then(function(up){
       tick=setInterval(function(){ if(progress<0.92){progress=Math.min(0.92,progress+0.02); if(onProgress)onProgress(progress);} },1000);
       return postJson(apiBase()+'/api/compose', JSON.stringify({
-        main:up.file||up.id, ins:ins, bgm:bgmUrl, subs:subs, mirrored:!!clip.mirrored, name:name+'.mp4'
+        main:up.file||up.id, ins:ins, bgm:bgmUrl, subs:subs, mirrored:!!clip.mirrored, name:name+'.mp4', outH:outH
       }));
     }).then(function(cr){
       if(tick)clearInterval(tick);
