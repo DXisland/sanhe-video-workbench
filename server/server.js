@@ -74,7 +74,12 @@ function sendJson(res, code, obj) {
 function publicBase(req) {
   if (config.baseUrl) return config.baseUrl;
   const host = (req.headers.host || '').trim();
-  if (host) return (req.headers['x-forwarded-proto'] || 'http') + '://' + host;
+  if (host) {
+    /* 优先反向代理头；否则按连接是否加密判断，避免 https 请求返回 http 链接（混合内容拦截） */
+    const enc = req.socket && req.socket.encrypted;
+    const proto = req.headers['x-forwarded-proto'] || (enc ? 'https' : 'http');
+    return proto + '://' + host;
+  }
   return 'http://localhost:' + config.port;
 }
 
@@ -413,7 +418,7 @@ async function handleCompose(req, res) {
 
   args.push('-filter_complex', fc.join(';'));
   args.push('-map', '[' + vLabel + ']', '-map', '[aout]');
-  args.push('-c:v', 'libx264', '-crf', '20', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-r', '30', '-g', '30', '-bf', '0', '-profile:v', 'baseline', '-level', '3.0', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart');
+  args.push('-c:v', 'libx264', '-crf', '20', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-r', '30', '-g', '30', '-bf', '0', '-profile:v', 'high', '-level', '5.1', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart');
 
   const outId = crypto.randomBytes(8).toString('hex');
   const outFile = outId + '.mp4';
