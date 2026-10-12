@@ -221,16 +221,16 @@ body.no-nav .bottomnav{display:none}
 
 #hud{position:fixed;top:0;left:0;right:0;z-index:4;padding:calc(env(safe-area-inset-top) + 10px) 12px 0}
 #hudTop{position:relative;display:flex;align-items:center;gap:6px;height:34px}
-.chip{display:inline-flex;align-items:center;gap:5px;background:rgba(20,20,24,.7);-webkit-border:1px solid rgba(255,255,255,.14);border-radius:999px;color:#fff;font-size:11.5px;letter-spacing:.5px;padding:6px 11px;font-weight:500}
+.chip{display:inline-flex;align-items:center;gap:5px;background:rgba(20,20,24,.7);border:1px solid rgba(255,255,255,.14);border-radius:999px;color:#fff;font-size:11.5px;letter-spacing:.5px;padding:6px 11px;font-weight:500}
 .chip.btn{pointer-events:auto;cursor:pointer}
 .chip.btn:active{opacity:.55}
 .chip .dot{width:6px;height:6px;border-radius:50%;background:#34C759;animation:blink 1.6s infinite}
 #hudTop .right{margin-left:auto;display:flex;gap:6px}
-#timer{position:absolute;left:50%;top:0;transform:translateX(-50%);display:none;align-items:center;gap:7px;background:rgba(20,20,24,.72);-webkit-border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:6px 15px;font-size:14px;font-weight:700;letter-spacing:1px;color:#FFD60A;font-variant-numeric:tabular-nums}
+#timer{position:absolute;left:50%;top:0;transform:translateX(-50%);display:none;align-items:center;gap:7px;background:rgba(20,20,24,.72);border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:6px 15px;font-size:14px;font-weight:700;letter-spacing:1px;color:#FFD60A;font-variant-numeric:tabular-nums}
 #timer.show{display:inline-flex}
 #timer .rdot{width:8px;height:8px;border-radius:50%;background:#FF3B30;animation:blink 1s infinite}
 
-.warnbox{position:fixed;left:50%;transform:translateX(-50%);z-index:6;display:none;padding:9px 17px;border-radius:var(--r-sm);font-size:13px;line-height:1.45;text-align:center;-webkit-pointer-events:none;max-width:88vw;animation:pop .25s ease-out}
+.warnbox{position:fixed;left:50%;transform:translateX(-50%);z-index:6;display:none;padding:9px 17px;border-radius:var(--r-sm);font-size:13px;line-height:1.45;text-align:center;pointer-events:none;max-width:88vw;animation:pop .25s ease-out}
 .warnbox.on{display:block}
 .warnbox.bad{border:1px solid rgba(255,59,48,.4);background:rgba(255,59,48,.18);color:#FFD1CD;font-weight:600}
 .warnbox.warn{border:1px solid rgba(255,149,0,.4);background:rgba(255,149,0,.18);color:#FFE0B2;font-weight:600}
@@ -238,11 +238,11 @@ body.no-nav .bottomnav{display:none}
 #warnBright{top:calc(env(safe-area-inset-top) + 58px)}
 
 #toast{position:fixed;top:calc(env(safe-area-inset-top) + 58px);right:12px;z-index:6;display:flex;flex-direction:column;align-items:flex-end;gap:6px;pointer-events:none;max-width:72vw}
-.toast{animation:pop .25s ease-out;padding:8px 14px;border-radius:var(--r-sm);background:rgba(29,29,31,.88);border:none;color:#fff;font-size:12.5px;line-height:1.4;text-align:right;box-shadow:0 8px 24px rgba(0,0,0,.25);-webkit-font-weight:500}
+.toast{animation:pop .25s ease-out;padding:8px 14px;border-radius:var(--r-sm);background:rgba(29,29,31,.88);border:none;color:#fff;font-size:12.5px;line-height:1.4;text-align:right;box-shadow:0 8px 24px rgba(0,0,0,.25);font-weight:500}
 .toast.warn{background:rgba(201,52,0,.92)}
 .toast.good{background:rgba(36,138,61,.94)}
 
-#micPill{position:fixed;left:12px;bottom:calc(env(safe-area-inset-bottom) + 206px);z-index:5;display:flex;align-items:center;gap:8px;padding:7px 11px;border-radius:999px;background:rgba(20,20,24,.7);-webkit-border:1px solid rgba(255,255,255,.14)}
+#micPill{position:fixed;left:12px;bottom:calc(env(safe-area-inset-bottom) + 206px);z-index:5;display:flex;align-items:center;gap:8px;padding:7px 11px;border-radius:999px;background:rgba(20,20,24,.7);border:1px solid rgba(255,255,255,.14)}
 #micPill svg{width:14px;height:14px;color:#fff;flex:none}
 #micDb{font-size:11px;font-weight:600;color:#fff;font-variant-numeric:tabular-nums;min-width:36px}
 #micPill .mp-bar{width:46px;height:4px;border-radius:2px;background:rgba(255,255,255,.25);overflow:hidden}
@@ -254,14 +254,14 @@ body.no-nav .bottomnav{display:none}
 #micPill.low svg{color:#FF453A;animation:blink 1.2s infinite}
 
 #ctl{position:fixed;left:0;right:0;bottom:0;z-index:5;padding:0 16px calc(env(safe-area-inset-bottom) + 14px);display:flex;flex-direction:column;align-items:center;gap:10px}
-#seg{display:flex;background:rgba(20,20,24,.7);-webkit-border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:3px}
+#seg{display:flex;background:rgba(20,20,24,.7);border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:3px}
 #seg button{border:0;background:none;color:rgba(255,255,255,.7);font-size:13px;letter-spacing:1px;padding:7px 22px;border-radius:999px;pointer-events:auto;font-weight:500}
 #seg button.on{background:rgba(255,255,255,.22);color:#fff;font-weight:700}
 #modes{display:flex;gap:10px}
-#modes button{padding:7px 18px;border-radius:999px;font-size:13px;letter-spacing:1px;background:rgba(20,20,24,.7);-webkit-border:1px solid rgba(255,255,255,.14);color:rgba(255,255,255,.8);pointer-events:auto;font-weight:500}
+#modes button{padding:7px 18px;border-radius:999px;font-size:13px;letter-spacing:1px;background:rgba(20,20,24,.7);border:1px solid rgba(255,255,255,.14);color:rgba(255,255,255,.8);pointer-events:auto;font-weight:500}
 #modes button.on{background:rgba(255,255,255,.22);color:#fff;font-weight:700}
 #row3{display:flex;align-items:center;gap:36px}
-.sbtn{width:46px;height:46px;border-radius:50%;border:none;background:rgba(20,20,24,.7);-webkit-color:#fff;display:flex;align-items:center;justify-content:center;pointer-events:auto;position:relative}
+.sbtn{width:46px;height:46px;border-radius:50%;border:none;background:rgba(20,20,24,.7);color:#fff;display:flex;align-items:center;justify-content:center;pointer-events:auto;position:relative}
 .sbtn:active{opacity:.55}
 .sbtn svg{width:20px;height:20px}
 .sbtn .lbl{position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);font-size:9.5px;color:rgba(255,255,255,.85);letter-spacing:1px;white-space:nowrap;text-shadow:0 1px 4px rgba(0,0,0,.7)}
@@ -302,7 +302,7 @@ body.no-nav .bottomnav{display:none}
 .note{margin-top:20px;font-size:11.5px;color:var(--ink3);line-height:1.8}
 #errCard{display:none;margin-top:20px;padding:14px 18px;border-radius:var(--r-sm);background:rgba(255,59,48,.08);border:1px solid rgba(255,59,48,.25);color:#C93400;font-size:13px;line-height:1.6;max-width:340px}
 
-#sheet{position:fixed;inset:0;z-index:11;background:rgba(245,245,247,.92);-webkit-display:none;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+#sheet{position:fixed;inset:0;z-index:11;background:rgba(245,245,247,.98);display:none;flex-direction:column;align-items:center;justify-content:center;padding:20px}
 #sheet.open{display:flex}
 #sheet h3{font-size:18px;font-weight:800;letter-spacing:-.2px;color:var(--ink);margin-bottom:16px}
 #sheet .media{width:min(72vw,52vh);aspect-ratio:9/16;background:#000;border-radius:var(--r-md);overflow:hidden;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow2)}
@@ -367,7 +367,7 @@ body.no-nav .bottomnav{display:none}
         <span class="harrow">›</span>
       </div>
     </div>
-    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v4.3 · 2026-10-10 17:45</span></div>
+    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v4.4 · 2026-10-10 18:20</span></div>
   </div>
 
   <!-- 底部导航：历史记录 / 门店短视频（当前） / 门店直播 -->
@@ -1288,7 +1288,7 @@ function updateCamDebug(){
   var dbg=document.getElementById('camDebug');
   if(!dbg)return;
   var ci=S.camInfo||{};
-  dbg.textContent='版本 v4.0\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
+  dbg.textContent='版本 v4.4\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
 }
 function startFpsProbe(){
   if(!v||typeof v.requestVideoFrameCallback!=='function')return;
@@ -1309,7 +1309,7 @@ function startFpsProbe(){
 }
 
 function startCamera(){
-  var vcFull={facingMode:S.front?'user':'environment',width:{ideal:1920,max:2560},height:{ideal:1440,max:1920}};
+  var vcFull={facingMode:S.front?'user':'environment',width:{ideal:1920,max:2560},height:{ideal:1440,max:1920},frameRate:{ideal:30,max:30}};
   var vcLite={facingMode:S.front?'user':'environment'};
   var ac={echoCancellation:true,noiseSuppression:true,autoGainControl:true};
   if(S.audioDeviceId){ac.deviceId={exact:S.audioDeviceId};}
@@ -1417,7 +1417,7 @@ function switchCamera(){
   if(S.recording||!S.stream)return;
   S.front=!S.front;
   var oldVid=S.stream.getVideoTracks(),aud=S.stream.getAudioTracks()[0];
-  var vc={facingMode:S.front?'user':'environment',width:{ideal:1920,max:2560},height:{ideal:1440,max:1920}};
+  var vc={facingMode:S.front?'user':'environment',width:{ideal:1920,max:2560},height:{ideal:1440,max:1920},frameRate:{ideal:30,max:30}};
   navigator.mediaDevices.getUserMedia({video:vc}).then(function(nst){
     var nt=nst.getVideoTracks()[0];
     S.stream=new MediaStream([nt,aud]);
@@ -1596,8 +1596,7 @@ function buildRecordStream(){
   return {stream:out,clean:function(){cancelAnimationFrame(raf);vt.stop()}};
 }
 function pickMime(){
-  /* 首选更高等级的 H.264（baseline 3.0 对高分辨率不友好，可能拖慢编码器） */
-  var cands=['video/mp4;codecs=avc1.640028,mp4a.40.2','video/mp4;codecs=avc1.4d0028,mp4a.40.2','video/mp4','video/webm;codecs=vp8,opus','video/webm;codecs=vp9,opus','video/webm'];
+  var cands=['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4','video/webm;codecs=vp8,opus','video/webm;codecs=vp9,opus','video/webm'];
   for(var i=0;i<cands.length;i++)if(window.MediaRecorder&&MediaRecorder.isTypeSupported(cands[i]))return cands[i];
   return '';
 }
@@ -1709,6 +1708,7 @@ function showSheet(kind,blob){
     box.appendChild(vv);
   }
   $('sheet').classList.add('open');
+  var _dbg=$('camDebug');if(_dbg)_dbg.style.display='none';
   $('saveBtn').onclick=function(){saveBlob(blob,name)};
   $('retakeBtn').onclick=closeSheet;
   $('toEditBtn').onclick=function(){
@@ -1725,7 +1725,7 @@ function showSheet(kind,blob){
   };
   $('sheetClose').onclick=closeSheet;
 }
-function closeSheet(){$('sheet').classList.remove('open')}
+function closeSheet(){$('sheet').classList.remove('open');var _dbg=$('camDebug');if(_dbg)_dbg.style.display='';}
 function saveBlob(blob,name,title){
   title=title||'拍摄素材';
   var f=new File([blob],name,{type:blob.type||'video/mp4'});
