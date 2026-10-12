@@ -367,7 +367,7 @@ body.no-nav .bottomnav{display:none}
         <span class="harrow">›</span>
       </div>
     </div>
-    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v5.1 · 2026-10-12 15:45</span></div>
+    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v5.2 · 2026-10-12 16:30</span></div>
   </div>
 
   <!-- 底部导航：历史记录 / 门店短视频（当前） / 门店直播 -->
@@ -1292,7 +1292,7 @@ function updateCamDebug(){
   var dbg=document.getElementById('camDebug');
   if(!dbg)return;
   var ci=S.camInfo||{};
-  dbg.textContent='版本 v5.1\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
+  dbg.textContent='版本 v5.2\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
 }
 function startFpsProbe(){
   if(!v||typeof v.requestVideoFrameCallback!=='function')return;
@@ -1315,7 +1315,7 @@ function startFpsProbe(){
 function startCamera(){
   var vcFull={facingMode:S.front?'user':'environment',width:{ideal:1920,max:2560},height:{ideal:1440,max:1920},frameRate:{ideal:30,max:30}};
   var vcLite={facingMode:S.front?'user':'environment'};
-  var ac={echoCancellation:true,noiseSuppression:true,autoGainControl:true};
+  var ac={echoCancellation:true,noiseSuppression:true,autoGainControl:false};
   if(S.audioDeviceId){ac.deviceId={exact:S.audioDeviceId};}
   function wire(st){
     S.stream=st;
@@ -1374,7 +1374,7 @@ function listAudioInputs(cb){
 }
 /* 切换麦克风：用新设备重取音频轨道，替换进当前流 */
 function selectAudioDevice(deviceId){
-  var ac={echoCancellation:true,noiseSuppression:true,autoGainControl:true};
+  var ac={echoCancellation:true,noiseSuppression:true,autoGainControl:false};
   if(deviceId){ac.deviceId={exact:deviceId};S.audioDeviceId=deviceId;}
   navigator.mediaDevices.getUserMedia({audio:ac}).then(function(nst){
     var newAud=nst.getAudioTracks()[0];

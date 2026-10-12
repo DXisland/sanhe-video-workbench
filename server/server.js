@@ -447,7 +447,7 @@ async function handleCompose(req, res) {
     console.log('[compose] 主视频无音轨，已补静音');
   }
   /* 音频：高通滤掉低频噪声 + FFT 降噪 + 温和增益（原来 1.8 会把底噪一起放大） */
-  fc.push('[' + mainAudio + ']highpass=f=95,afftdn=nr=12:nf=-28,volume=1.15[a0]');
+  fc.push('[' + mainAudio + ']highpass=f=95,afftdn=nr=8:nf=-35,dynaudnorm=p=0.9,volume=1.05[a0]');
   if (bgmPath) {
     const aIdx = 1 + insFiles.length;
     fc.push('[' + aIdx + ':a]volume=0.22[a1]');
