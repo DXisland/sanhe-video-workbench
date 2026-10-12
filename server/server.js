@@ -294,14 +294,21 @@ function downloadTo(url, dest) {
   });
 }
 
-/* 运行 ffmpeg，返回 Promise */
-function runFfmpeg(args) {
+/* 运行 ffmpeg，返回 Promise（带超时保护，防止个别输入让 ffmpeg 卡死拖垮服务器） */
+function runFfmpeg(args, timeoutMs) {
   return new Promise((resolve, reject) => {
     const p = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
     let err = '';
+    let done = false;
+    const timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      try { p.kill('SIGKILL'); } catch (e) { /* 忽略 */ }
+      reject(new Error('ffmpeg 执行超时，已终止'));
+    }, timeoutMs || 240000);
     p.stderr.on('data', (d) => { err += d.toString(); if (err.length > 8000) err = err.slice(-8000); });
-    p.on('error', reject);
-    p.on('close', (code) => { code === 0 ? resolve() : reject(new Error(err || ('ffmpeg exit ' + code))); });
+    p.on('error', (e) => { if (done) return; done = true; clearTimeout(timer); reject(e); });
+    p.on('close', (code) => { if (done) return; done = true; clearTimeout(timer); code === 0 ? resolve() : reject(new Error(err || ('ffmpeg exit ' + code))); });
   });
 }
 
@@ -374,6 +381,17 @@ async function handleCompose(req, res) {
   const mirrored = !!input.mirrored;
   const name = String(input.name || '');
 
+  /* 探测主视频是否含音轨（无麦克风录制时会没有音轨，需补静音，否则合成失败） */
+  const hasAudio = await new Promise((resolve) => {
+    try {
+      const p = spawn('ffprobe', ['-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=codec_type', '-of', 'default=nw=1:nk=1', mainPath]);
+      let out = '';
+      p.stdout.on('data', (d) => { out += d; });
+      p.on('close', () => resolve(/audio/.test(out)));
+      p.on('error', () => resolve(true));
+    } catch (e) { resolve(true); }
+  });
+
   const args = ['-y', '-fflags', '+genpts+discardcorrupt', '-i', mainPath];
   const insFiles = [];
   for (let i = 0; i < ins.length; i++) {
@@ -421,8 +439,15 @@ async function handleCompose(req, res) {
     vLabel = 'vout';
   }
 
+  /* 主音频源：有音轨用主视频，无音轨则补一路静音（无麦克风录制时） */
+  let mainAudio = '0:a';
+  if (!hasAudio) {
+    args.push('-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100');
+    mainAudio = (1 + insFiles.length + (bgmPath ? 1 : 0)) + ':a';
+    console.log('[compose] 主视频无音轨，已补静音');
+  }
   /* 音频：高通滤掉低频噪声 + FFT 降噪 + 温和增益（原来 1.8 会把底噪一起放大） */
-  fc.push('[0:a]highpass=f=95,afftdn=nr=12:nf=-28,volume=1.15[a0]');
+  fc.push('[' + mainAudio + ']highpass=f=95,afftdn=nr=12:nf=-28,volume=1.15[a0]');
   if (bgmPath) {
     const aIdx = 1 + insFiles.length;
     fc.push('[' + aIdx + ':a]volume=0.22[a1]');
@@ -434,6 +459,7 @@ async function handleCompose(req, res) {
   args.push('-filter_complex', fc.join(';'));
   args.push('-map', '[' + vLabel + ']', '-map', '[aout]');
   args.push('-c:v', 'libx264', '-crf', '20', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-r', '30', '-g', '30', '-bf', '0', '-profile:v', 'main', '-level', '5.0', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart');
+  if (!hasAudio) args.push('-shortest'); /* 补静音时 anullsrc 是无限流，需限定到视频长度 */
 
   const outId = crypto.randomBytes(8).toString('hex');
   const outFile = outId + '.mp4';
