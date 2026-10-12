@@ -367,7 +367,7 @@ body.no-nav .bottomnav{display:none}
         <span class="harrow">›</span>
       </div>
     </div>
-    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v4.9 · 2026-10-10 22:30</span></div>
+    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v5.0 · 2026-10-10 23:15</span></div>
   </div>
 
   <!-- 底部导航：历史记录 / 门店短视频（当前） / 门店直播 -->
@@ -769,7 +769,7 @@ function initLog(){
     window.addEventListener('pagehide',flushLog);
     window.addEventListener('beforeunload',flushLog);
   }
-  setInterval(flushLog,5000);
+  setInterval(function(){if(!S.recording)flushLog();},5000);
   sendLog('usage','info','页面打开',{page:location.pathname,ref:document.referrer||''});
 }
 initLog();
@@ -1288,7 +1288,7 @@ function updateCamDebug(){
   var dbg=document.getElementById('camDebug');
   if(!dbg)return;
   var ci=S.camInfo||{};
-  dbg.textContent='版本 v4.9\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
+  dbg.textContent='版本 v5.0\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
 }
 function startFpsProbe(){
   if(!v||typeof v.requestVideoFrameCallback!=='function')return;
@@ -1454,9 +1454,11 @@ function sampleBrightness(){
   else if(S.brightBad){S.brightBad=false;showWarn('warnBright','亮度正常','good',1200)}
 }
 
+var _audioBuf=null;
 function sampleAudio(){
   if(!S.analyser)return;
-  var buf=new Uint8Array(S.analyser.fftSize);
+  if(!_audioBuf||_audioBuf.length!==S.analyser.fftSize)_audioBuf=new Uint8Array(S.analyser.fftSize);
+  var buf=_audioBuf;
   S.analyser.getByteTimeDomainData(buf);
   var s=0,d,i;
   for(i=0;i<buf.length;i++){d=(buf[i]-128)/128;s+=d*d}
@@ -1587,9 +1589,14 @@ function buildRecordStream(){
   var cw=Math.max(2, Math.round(sw*scale)), ch=Math.max(2, Math.round(sh*scale));
   cw=cw-(cw%2); ch=ch-(ch%2);
   var cn=document.createElement('canvas');cn.width=cw;cn.height=ch;
-  var cc=cn.getContext('2d'),raf=null;
-  var draw=function(){drawFrame(cc,cw,ch);raf=requestAnimationFrame(draw)};
-  draw();
+  var cc=cn.getContext('2d'),raf=null,lastDraw=0;
+  /* 只按 30fps 重绘（原来跟着屏幕 60fps 重绘，白耗一半性能） */
+  var draw=function(ts){
+    ts=ts||performance.now();
+    if(ts-lastDraw>=33){lastDraw=ts;drawFrame(cc,cw,ch);}
+    raf=requestAnimationFrame(draw);
+  };
+  raf=requestAnimationFrame(draw);
   var cs=null,vt=null;
   try{cs=cn.captureStream(30);if(cs)vt=cs.getVideoTracks()[0]}catch(e){cs=null;vt=null}
   if(!vt){cancelAnimationFrame(raf);return null}
