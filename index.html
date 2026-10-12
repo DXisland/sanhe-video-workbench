@@ -367,7 +367,7 @@ body.no-nav .bottomnav{display:none}
         <span class="harrow">›</span>
       </div>
     </div>
-    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v5.0 · 2026-10-10 23:15</span></div>
+    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v5.1 · 2026-10-12 15:45</span></div>
   </div>
 
   <!-- 底部导航：历史记录 / 门店短视频（当前） / 门店直播 -->
@@ -708,10 +708,14 @@ var isIOS=/iP(hone|ad|od)/.test(navigator.userAgent);
    避免 https 页面调用 http 接口被浏览器按「混合内容」拦截 */
 var SERVER_URL='https://43.142.44.57';
 var SAME_ORIGIN=false;
-/* 若当前页面就部署在后端服务器上（同域名），自动改为相对路径，杜绝混合内容/CORS 问题 */
-if(/^https?:$/.test(location.protocol)&&SERVER_URL){
-  var SERVER_HOST=SERVER_URL.replace(/^https?:\/\//,'').split('/')[0].split(':')[0];
-  if(location.hostname===SERVER_HOST){SAME_ORIGIN=true;SERVER_URL='';}
+/* 由我们的服务器托管（非 GitHub Pages）时用同源相对路径，调用自身后端；
+   GitHub Pages 时用远端服务器 SERVER_URL。这样旧入口(→旧服务器)与新域名(→新服务器)各自独立工作 */
+if(/^https?:$/.test(location.protocol)){
+  if(/\.github\.io$/i.test(location.hostname)){
+    SAME_ORIGIN=false;
+  }else{
+    SAME_ORIGIN=true;SERVER_URL='';
+  }
 }
 var apiBase=function(){return SAME_ORIGIN?'':SERVER_URL};
 /* 安全升级：https 页面下把任何 http 资源链接升级为 https，避免混合内容被拦截导致成品无法预览 */
@@ -1288,7 +1292,7 @@ function updateCamDebug(){
   var dbg=document.getElementById('camDebug');
   if(!dbg)return;
   var ci=S.camInfo||{};
-  dbg.textContent='版本 v5.0\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
+  dbg.textContent='版本 v5.1\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
 }
 function startFpsProbe(){
   if(!v||typeof v.requestVideoFrameCallback!=='function')return;
