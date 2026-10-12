@@ -367,7 +367,7 @@ body.no-nav .bottomnav{display:none}
         <span class="harrow">›</span>
       </div>
     </div>
-    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v4.6 · 2026-10-10 19:40</span></div>
+    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v4.7 · 2026-10-10 20:20</span></div>
   </div>
 
   <!-- 底部导航：历史记录 / 门店短视频（当前） / 门店直播 -->
@@ -1288,7 +1288,7 @@ function updateCamDebug(){
   var dbg=document.getElementById('camDebug');
   if(!dbg)return;
   var ci=S.camInfo||{};
-  dbg.textContent='版本 v4.6\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
+  dbg.textContent='版本 v4.7\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
 }
 function startFpsProbe(){
   if(!v||typeof v.requestVideoFrameCallback!=='function')return;
@@ -1577,7 +1577,7 @@ function drawFrame(c,cw,ch){
 function buildRecordStream(){
   var sw=v.videoWidth||1080, sh=v.videoHeight||1920;
   var MAXPIX=1200000; /* 限制录制像素，避免编码器过载掉帧（视野不变，仅降采样） */
-  var needCanvas=(S.zoom!==1)||(sw*sh>MAXPIX);
+  var needCanvas=(S.zoom!==1)||(sw*sh>MAXPIX)||S.flipH;
   if(!needCanvas){
     /* 流本身已足够小：直接走原始相机流（硬件编码、时间戳精准） */
     return {stream:S.stream,clean:function(){}};
@@ -1678,7 +1678,8 @@ function onRecordStop(){
   S.chunks=[];
   if(blob.size<1024){toast('录像失败，请重试','bad');return}
   /* 记录是否为前置镜像：合成阶段需要统一翻回（保持输出与预览一致） */
-  S.recMirrored=!!S.flipH;
+  /* 录制流已按预览方向翻转（画布内完成），成片端不再二次翻转，避免处理方向不一致 */
+  S.recMirrored=false;
   sendLog('record','info','录制完成 '+(S.recDur||0).toFixed(1)+'s '+S.recMime,{size:blob.size});
   showSheet('video',blob);
   if(S.recMime.indexOf('webm')>=0)toast('当前为 WebM 格式，上传抖音前可能需要转成 MP4','warn');
@@ -1707,8 +1708,6 @@ function showSheet(kind,blob){
     /* X5 内核同层播放：避免视频默认全屏/层级置顶遮挡「去剪辑」等按钮 */
     vv.setAttribute('x5-video-player-type','h5');
     vv.setAttribute('x5-playsinline','true');
-    /* 原始录制流在微信内是镜像的：按同一镜像参数显示，保证与成片一致 */
-    vv.style.transform=S.flipH?'scaleX(-1)':'none';
     box.appendChild(vv);
   }
   $('sheet').classList.add('open');
