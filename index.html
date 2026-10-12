@@ -367,7 +367,7 @@ body.no-nav .bottomnav{display:none}
         <span class="harrow">›</span>
       </div>
     </div>
-    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v5.2 · 2026-10-12 16:30</span></div>
+    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v5.3 · 2026-10-12 17:30</span></div>
   </div>
 
   <!-- 底部导航：历史记录 / 门店短视频（当前） / 门店直播 -->
@@ -560,8 +560,8 @@ body.no-nav .bottomnav{display:none}
         <button class="abtn ghost" id="editRestartBtn" style="flex:1;min-width:120px">重新配置</button>
       </div>
     </div>
-    <div id="savePanel" class="hide" style="position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:9990;display:flex;align-items:center;justify-content:center;padding:16px">
-      <div style="background:#fff;border-radius:14px;padding:16px;width:94%;max-width:420px;max-height:88vh;overflow:auto;text-align:center;position:relative">
+    <div id="savePanel" class="hide" style="position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:9990;display:flex;align-items:flex-start;justify-content:center;padding:calc(env(safe-area-inset-top) + 24px) 16px 24px;overflow-y:auto;-webkit-overflow-scrolling:touch">
+      <div style="background:#fff;border-radius:14px;padding:16px;width:94%;max-width:420px;text-align:center;position:relative;margin:auto 0">
         <button id="savePanelX" style="position:absolute;top:8px;right:10px;width:32px;height:32px;border:none;background:#f0f0f0;border-radius:50%;font-size:16px;line-height:1;color:#333;cursor:pointer">✕</button>
         <div style="font-size:16px;font-weight:800;color:#333;margin-bottom:10px;padding-right:28px">保存成片 <span style="font-size:12px;color:#999;font-weight:600">v3.3</span></div>
         <video id="savePanelVideo" controls playsinline webkit-playsinline x5-video-player-type="h5" x5-playsinline="true" style="width:100%;border-radius:10px;background:#000;max-height:34vh;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto;touch-action:manipulation"></video>
@@ -1292,7 +1292,7 @@ function updateCamDebug(){
   var dbg=document.getElementById('camDebug');
   if(!dbg)return;
   var ci=S.camInfo||{};
-  dbg.textContent='版本 v5.2\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
+  dbg.textContent='版本 v5.3\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
 }
 function startFpsProbe(){
   if(!v||typeof v.requestVideoFrameCallback!=='function')return;
@@ -3041,7 +3041,7 @@ function loop(){
     var isWx=/micromessenger|wxwork/i.test(navigator.userAgent);
     var hintEl=$('savePanelHint');
     if(hintEl){
-      hintEl.textContent=isWx?'你在微信/企业微信内：无法直接下载，请按下面三步用「生成链接」：':'按下面三步，把视频保存到手机：';
+      hintEl.textContent=isWx?'你在微信/企业微信内：点「保存到相册」，在系统菜单里选「储存视频」即可存到手机相册：':'按下面三步，把视频保存到手机：';
     }
 
     var dlUrl=videoUrl.replace(/\/v\//,'/dl/');
@@ -3050,15 +3050,36 @@ function loop(){
       if(sv){try{sv.pause()}catch(e){sv.src='';}}
     };
 
+    /* 用系统分享把「文件」分享出去：企业微信/微信会弹出含「储存视频」的系统指令栏，可直接存相册 */
+    var saveViaSystemShare=function(btn){
+      if(!navigator.share){toast('当前环境不支持系统保存，请用「生成链接」','warn');return;}
+      var orig=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='准备中…';}
+      fetch(videoUrl).then(function(r){return r.blob()}).then(function(blob){
+        var f=null;
+        try{f=new File([blob],fileName||('成片_'+Date.now()+'.mp4'),{type:blob.type||'video/mp4'});}catch(e){f=null;}
+        if(f&&navigator.canShare&&navigator.canShare({files:[f]})){
+          return navigator.share({files:[f],title:'短视频成片'});
+        }
+        return navigator.share({title:'短视频成片',text:fileName,url:videoUrl});
+      }).then(function(){
+        if(btn){btn.disabled=false;btn.textContent=orig;}
+      }).catch(function(e){
+        if(btn){btn.disabled=false;btn.textContent=orig;}
+        if(e&&e.name==='AbortError')return;
+        toast('系统保存未完成，可改用「生成链接」','warn');
+      });
+    };
+
     var dl=$('savePanelDownload');
     if(dl){
+      if(isWx)dl.textContent='保存到相册';
       dl.onclick=function(){
-        if(isWx){toast('微信/企业微信内无法直接下载，请点「生成链接」把链接发到聊天','warn');return;}
+        sendLog('save','info','保存/下载文件');
+        if(isWx){saveViaSystemShare(dl);return;}
         var a=document.createElement('a');a.href=dlUrl;a.download=fileName;
         a.style.display='none';document.body.appendChild(a);a.click();
         setTimeout(function(){a.remove()},500);
         toast('已开始下载，请在下载列表查看','good');
-        sendLog('save','info','下载文件');
       };
     }
     /* 生成链接：成片已在云端，直接复制链接即可 */
@@ -3077,20 +3098,10 @@ function loop(){
     if(linkCopyBtn){
       linkCopyBtn.onclick=function(){copyText(videoUrl);toast('链接已复制','good');};
     }
-    /* 分享：分享链接（企业微信内 files 会被丢弃，链接最稳） */
+    /* 分享视频：分享「文件」（企微可存相册），不支持则退化为分享链接 */
     var shareBtn=$('savePanelShare');
     if(shareBtn){
-      shareBtn.onclick=function(){
-        sendLog('save','info','分享视频');
-        if(navigator.share){
-          try{
-            var p=navigator.share({title:'短视频成片',text:fileName,url:videoUrl});
-            if(p&&p.then)p.catch(function(){});
-          }catch(e){copyText(videoUrl);toast('已复制链接，粘贴到微信/企业微信发送','good');}
-        }else{
-          copyText(videoUrl);toast('已复制链接，粘贴到微信/企业微信发送','good');
-        }
-      };
+      shareBtn.onclick=function(){sendLog('save','info','分享视频');saveViaSystemShare(shareBtn);};
     }
     var cl=$('savePanelClose');
     if(cl){cl.onclick=closePanel;}
