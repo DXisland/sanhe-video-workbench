@@ -367,7 +367,7 @@ body.no-nav .bottomnav{display:none}
         <span class="harrow">›</span>
       </div>
     </div>
-    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v4.7 · 2026-10-10 20:20</span></div>
+    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v4.8 · 2026-10-10 21:30</span></div>
   </div>
 
   <!-- 底部导航：历史记录 / 门店短视频（当前） / 门店直播 -->
@@ -533,7 +533,7 @@ body.no-nav .bottomnav{display:none}
       <span id="editSynthStatus" class="hide"></span>
       <p id="editShotInfo" style="font-size:12.5px;color:var(--ink2);margin-bottom:14px"></p>
       <div class="preview" id="editPreview" style="position:relative">
-        <video id="editPreviewMedia" controls playsinline webkit-playsinline x5-video-player-type="h5" x5-playsinline="true" style="width:100%;height:auto;border-radius:12px;background:#000"></video>
+        <video id="editPreviewMedia" controls playsinline webkit-playsinline x5-video-player-type="h5" x5-playsinline="true" style="width:100%;height:100%;object-fit:contain;border-radius:12px;background:#000"></video>
         <div id="editSynthOverlay" class="hide" style="position:absolute;inset:0;background:rgba(0,0,0,.82);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;border-radius:12px;z-index:10">
           <div style="width:40px;height:40px;border:3px solid rgba(255,255,255,.18);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite"></div>
           <div style="color:#fff;font-size:14px;font-weight:600" id="editSynthText">正在合成成片...</div>
@@ -1288,7 +1288,7 @@ function updateCamDebug(){
   var dbg=document.getElementById('camDebug');
   if(!dbg)return;
   var ci=S.camInfo||{};
-  dbg.textContent='版本 v4.7\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
+  dbg.textContent='版本 v4.8\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
 }
 function startFpsProbe(){
   if(!v||typeof v.requestVideoFrameCallback!=='function')return;
@@ -2385,12 +2385,12 @@ function renderEdit(){
     return;
   }
   if(media.tagName!=='VIDEO'){
-    $('editPreviewMedia').outerHTML='<video id="editPreviewMedia" controls playsinline webkit-playsinline x5-video-player-type="h5" x5-playsinline="true" style="width:100%;height:auto;border-radius:12px;background:#000"></video>';
+    $('editPreviewMedia').outerHTML='<video id="editPreviewMedia" controls playsinline webkit-playsinline x5-video-player-type="h5" x5-playsinline="true" style="width:100%;height:100%;object-fit:contain;border-radius:12px;background:#000"></video>';
     media=$('editPreviewMedia');
   }
   media.src=LAST_SHOT.url;
-  /* 原始录制流在微信内是镜像的：按同一镜像参数显示，保证与最终成片一致 */
-  media.style.transform=S.flipH?'scaleX(-1)':'none';
+  /* 录制文件方向已在生成时定好，这里不再翻转（否则整页含播放器控件都会镜像） */
+  media.style.transform='none';
   media.setAttribute('playsinline','');
   $('matPanel').classList.add('hide');
   $('editSynthOverlay').classList.add('hide');
@@ -2684,15 +2684,20 @@ function composeFinalClip(clip, segments, scriptInfo, plan, onProgress){
     }
     var subs=buildSubTimeline(D);
 
-    /* 穿插素材：固定第4秒、第9秒，时长2-3秒（与旧版一致） */
+    /* 穿插素材：按视频时长智能排布，每段至少展示 3.5 秒 */
     var insertDefs=(plan.inserts||[]).map(function(id){
       return MATERIAL_LIB.items.video.find(function(v){return v.id===id});
-    }).filter(Boolean).slice(0,2);
-    var dl1=2000+Math.floor(Math.random()*1000);
-    var dl2=2000+Math.floor(Math.random()*1000);
+    }).filter(function(v){return v&&v.url;}).slice(0,2);
     var ins=[];
-    if(insertDefs[0])ins.push({url:insertDefs[0].url,start:4,dur:dl1/1000});
-    if(insertDefs[1])ins.push({url:insertDefs[1].url,start:9,dur:dl2/1000});
+    var INS_DUR=3.5;
+    for(var ii=0;ii<insertDefs.length;ii++){
+      var st=(insertDefs.length===1)?(D*0.4):(ii===0?D*0.2:D*0.62);
+      var dur=INS_DUR;
+      if(st+2.5>D)st=Math.max(0.5,D-INS_DUR-0.3);
+      if(st+dur>D-0.2)dur=Math.max(2.8,D-0.2-st);
+      if(st<0)st=0;
+      ins.push({url:insertDefs[ii].url,start:Math.round(st*1000)/1000,dur:Math.round(dur*1000)/1000});
+    }
 
     var bgmUrl='';
     if(plan.bgm){
@@ -2702,16 +2707,20 @@ function composeFinalClip(clip, segments, scriptInfo, plan, onProgress){
 
     var name='成片_'+new Date().toLocaleString('zh-CN',{hour12:false}).replace(/[/:\s]/g,'-');
     var ext=(clip.blob.type||'').indexOf('mp4')>=0?'mp4':'webm';
-    /* 成片按手机屏幕物理分辨率输出，保证铺满整屏（宽高都匹配屏幕，避免四周黑边） */
+    /* 成片按手机屏幕比例输出（宽度固定 1080），保证铺满整屏、避免四周黑边 */
     var outW=1080,outH=1920;
     try{
-      var dpr=Math.min(window.devicePixelRatio||2,3);
-      var sw=(window.screen&&screen.width)?screen.width:360;
-      var sh=(window.screen&&screen.height)?screen.height:780;
-      var rawW=Math.round(sw*dpr),rawH=Math.round(sh*dpr);
-      outW=Math.min(1440,Math.max(720,rawW-(rawW%2)));
-      outH=Math.min(3200,Math.max(1280,rawH-(rawH%2)));
+      var sw=(window.screen&&screen.width)?screen.width:(window.innerWidth||360);
+      var sh=(window.screen&&screen.height)?screen.height:(window.innerHeight||780);
+      var asp=sh/sw;
+      if(!(asp>1&&asp<3))asp=(window.innerHeight/window.innerWidth)||(16/9);
+      asp=Math.min(2.4,Math.max(16/9,asp));
+      outW=1080;
+      outH=Math.round(1080*asp/2)*2;
+      outH=Math.min(2880,Math.max(1920,outH));
     }catch(e){}
+    sendLog('compose','info','成片尺寸',{outW:outW,outH:outH,scr:(window.screen?screen.width+'x'+screen.height:'?'),inner:window.innerWidth+'x'+window.innerHeight,dpr:window.devicePixelRatio});
+    flushLog();
     var progress=0;
     var tick=null;
     uploadBinary(apiBase()+'/api/upload?ext='+ext+'&name='+encodeURIComponent(name+'.'+ext), clip.blob, function(p){

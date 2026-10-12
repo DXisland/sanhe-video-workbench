@@ -331,8 +331,8 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Noto Sans CJK SC,86,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,6,0,2,0,0,153,1
-Style: Gold,Noto Sans CJK SC,86,&H0000D7FF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,6,0,2,0,0,153,1
+Style: Default,Noto Sans CJK SC,120,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,6,0,2,0,0,153,1
+Style: Gold,Noto Sans CJK SC,120,&H0000D7FF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,6,0,2,0,0,153,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -379,12 +379,19 @@ async function handleCompose(req, res) {
   for (let i = 0; i < ins.length; i++) {
     const u = ins[i] && ins[i].url;
     if (!u) continue;
-    try {
-      const dest = path.join(tmpDir, 'ins' + i + '.mp4');
-      await downloadTo(u, dest);
-      insFiles.push({ path: dest, start: parseFloat(ins[i].start) || 0, dur: parseFloat(ins[i].dur) || 2 });
+    const dest = path.join(tmpDir, 'ins' + i + '.mp4');
+    let ok = false;
+    for (let attempt = 0; attempt < 3 && !ok; attempt++) {
+      try { await downloadTo(u, dest); ok = true; }
+      catch (e) { if (attempt < 2) await new Promise((r) => setTimeout(r, 900)); }
+    }
+    if (ok) {
+      insFiles.push({ path: dest, start: parseFloat(ins[i].start) || 0, dur: parseFloat(ins[i].dur) || 3.5 });
       args.push('-i', dest);
-    } catch (e) { /* 单个素材失败则跳过，不影响整体 */ }
+      console.log('[compose] 穿插素材#%d 已就绪 start=%s dur=%s', i, ins[i].start, ins[i].dur);
+    } else {
+      console.log('[compose] 穿插素材#%d 下载失败，已跳过 url=%s', i, u);
+    }
   }
   let bgmPath = null;
   if (bgmUrl) {
