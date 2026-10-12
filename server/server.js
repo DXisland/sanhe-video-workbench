@@ -421,8 +421,8 @@ async function handleCompose(req, res) {
     vLabel = 'vout';
   }
 
-  /* 音频：主视频音量增益 1.8；有 BGM 时混入（0.22） */
-  fc.push('[0:a]volume=1.8[a0]');
+  /* 音频：高通滤掉低频噪声 + FFT 降噪 + 温和增益（原来 1.8 会把底噪一起放大） */
+  fc.push('[0:a]highpass=f=95,afftdn=nr=12:nf=-28,volume=1.15[a0]');
   if (bgmPath) {
     const aIdx = 1 + insFiles.length;
     fc.push('[' + aIdx + ':a]volume=0.22[a1]');

@@ -367,7 +367,7 @@ body.no-nav .bottomnav{display:none}
         <span class="harrow">›</span>
       </div>
     </div>
-    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v4.8 · 2026-10-10 21:30</span></div>
+    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v4.9 · 2026-10-10 22:30</span></div>
   </div>
 
   <!-- 底部导航：历史记录 / 门店短视频（当前） / 门店直播 -->
@@ -1288,7 +1288,7 @@ function updateCamDebug(){
   var dbg=document.getElementById('camDebug');
   if(!dbg)return;
   var ci=S.camInfo||{};
-  dbg.textContent='版本 v4.8\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
+  dbg.textContent='版本 v4.9\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
 }
 function startFpsProbe(){
   if(!v||typeof v.requestVideoFrameCallback!=='function')return;
@@ -1629,6 +1629,7 @@ function startRecord(){
 function doStartRecord(){
   if(S.recording||!S.stream)return;
   S.chunks=[];
+  S._stopHandled=false;
   S.recMime=pickMime();
   var built=buildRecordStream();
   var rs;
@@ -1636,7 +1637,7 @@ function doStartRecord(){
   else{rs=S.stream;toast('当前浏览器不支持画面合成，将录制原始画面','warn')}
   if(!window.MediaRecorder){toast('当前浏览器不支持录像，请升级 Safari/Chrome','bad');if(S.flipClean){S.flipClean();S.flipClean=null}return}
   try{
-    S.recorder=new MediaRecorder(rs,{mimeType:S.recMime,videoBitsPerSecond:7000000,audioBitsPerSecond:128000});
+    S.recorder=new MediaRecorder(rs,{mimeType:S.recMime,videoBitsPerSecond:7000000,audioBitsPerSecond:160000});
   }catch(e){
     try{S.recorder=new MediaRecorder(rs);S.recMime=S.recorder.mimeType||''}
     catch(e2){toast('无法开始录像','bad');if(S.flipClean){S.flipClean();S.flipClean=null}return}
@@ -1644,7 +1645,7 @@ function doStartRecord(){
   S.recorder.ondataavailable=function(e){if(e.data&&e.data.size)S.chunks.push(e.data)};
   S.recorder.onerror=function(){try{stopRecord()}catch(_){} };
   S.recorder.onstop=onRecordStop;
-  S.recorder.start(2000);
+  S.recorder.start(1000);
   S.recording=true;S.recStart=Date.now();
   sendLog('record','info','开始录制');
   S.recTimer=setInterval(function(){
@@ -1672,17 +1673,22 @@ function stopRecord(){
   try{S.recorder.stop()}catch(e){}
 }
 function onRecordStop(){
-  setRecUI(false);
-  if(S.flipClean){try{S.flipClean()}catch(_){ }S.flipClean=null}
-  var blob=new Blob(S.chunks,{type:S.recMime||'video/mp4'});
-  S.chunks=[];
-  if(blob.size<1024){toast('录像失败，请重试','bad');return}
-  /* 记录是否为前置镜像：合成阶段需要统一翻回（保持输出与预览一致） */
-  /* 录制流已按预览方向翻转（画布内完成），成片端不再二次翻转，避免处理方向不一致 */
-  S.recMirrored=false;
-  sendLog('record','info','录制完成 '+(S.recDur||0).toFixed(1)+'s '+S.recMime,{size:blob.size});
-  showSheet('video',blob);
-  if(S.recMime.indexOf('webm')>=0)toast('当前为 WebM 格式，上传抖音前可能需要转成 MP4','warn');
+  if(S._stopHandled)return;
+  S._stopHandled=true;
+  var finalize=function(){
+    setRecUI(false);
+    if(S.flipClean){try{S.flipClean()}catch(_){ }S.flipClean=null}
+    var blob=new Blob(S.chunks,{type:S.recMime||'video/mp4'});
+    S.chunks=[];
+    if(blob.size<1024){toast('录像失败，请重试','bad');return}
+    /* 录制流已按预览方向翻转（画布内完成），成片端不再二次翻转，避免处理方向不一致 */
+    S.recMirrored=false;
+    sendLog('record','info','录制完成 '+(S.recDur||0).toFixed(1)+'s '+S.recMime,{size:blob.size});
+    showSheet('video',blob);
+    if(S.recMime.indexOf('webm')>=0)toast('当前为 WebM 格式，上传抖音前可能需要转成 MP4','warn');
+  };
+  /* 延迟 400ms 再组装：部分内核（X5）末尾的 dataavailable 晚于 stop 事件，立即组装会丢掉最后一段（约2秒） */
+  setTimeout(finalize,400);
 }
 function setRecUI(on){
   if(on){$('shutter').classList.add('rec');$('timer').classList.add('show')}
@@ -2234,29 +2240,41 @@ function audioBufferToWav(buffer){
   return new Blob([ab],{type:'audio/wav'});
 }
 function callSenseVoice(fileBlob,filename,cb){
-  /* 语音识别改由服务器自托管 whisper 完成，免费且不依赖第三方计费 */
+  /* 语音识别由服务器完成；首次可能因冷启动/瞬时错误失败，自动重试最多3次 */
   var url=apiBase()+'/api/asr';
-  var xhr=new XMLHttpRequest();
-  xhr.open('POST',url,true);
-  xhr.setRequestHeader('Content-Type','application/octet-stream');
-  xhr.timeout=300000;
-  xhr.onload=function(){
-    var d=null;try{d=JSON.parse(xhr.responseText)}catch(e){}
-    if(!(d&&d.text)){toast('识别服务返回为空（HTTP '+xhr.status+'），已尽力识别','warn');sendLog('asr','warn','识别返回为空 HTTP '+xhr.status,{size:fileBlob&&fileBlob.size});}
-    else{sendLog('asr','info','识别成功 '+d.text.length+'字',{size:fileBlob&&fileBlob.size});}
-    cb&&cb((d&&d.text)||'');
-  };
-  xhr.onerror=function(){
-    var reason='网络错误';
-    if(location.protocol==='https:'&&url.indexOf('http://')===0){
-      reason='页面HTTPS后端HTTP被混合内容拦截';
-    }
-    toast('字幕识别失败：'+reason,'warn');
-    sendLog('asr','error','字幕识别失败：'+reason,{url:url,size:fileBlob&&fileBlob.size});
-    cb&&cb('');
-  };
-  xhr.ontimeout=function(){toast('字幕识别超时（网络慢或视频较长）','warn');sendLog('asr','error','字幕识别超时',{size:fileBlob&&fileBlob.size});cb&&cb('');};
-  xhr.send(fileBlob);
+  var attempt=0, MAX=3;
+  function tryOnce(){
+    attempt++;
+    var xhr=new XMLHttpRequest();
+    xhr.open('POST',url,true);
+    xhr.setRequestHeader('Content-Type','application/octet-stream');
+    xhr.timeout=300000;
+    xhr.onload=function(){
+      var d=null;try{d=JSON.parse(xhr.responseText)}catch(e){}
+      if(d&&d.text){
+        sendLog('asr','info','识别成功 '+d.text.length+'字',{size:fileBlob&&fileBlob.size,attempt:attempt});
+        cb&&cb(d.text);return;
+      }
+      if(attempt<MAX){sendLog('asr','warn','识别返回为空，自动重试'+attempt,{http:xhr.status});setTimeout(tryOnce,900);return;}
+      toast('识别服务返回为空（HTTP '+xhr.status+'），已尽力识别','warn');
+      sendLog('asr','warn','识别返回为空 HTTP '+xhr.status,{size:fileBlob&&fileBlob.size});
+      cb&&cb('');
+    };
+    xhr.onerror=function(){
+      if(attempt<MAX){sendLog('asr','warn','识别网络错误，自动重试'+attempt,{});setTimeout(tryOnce,900);return;}
+      var reason='网络错误';
+      if(location.protocol==='https:'&&url.indexOf('http://')===0){reason='页面HTTPS后端HTTP被混合内容拦截';}
+      toast('字幕识别失败：'+reason,'warn');
+      sendLog('asr','error','字幕识别失败：'+reason,{url:url,size:fileBlob&&fileBlob.size});
+      cb&&cb('');
+    };
+    xhr.ontimeout=function(){
+      if(attempt<MAX){sendLog('asr','warn','识别超时，自动重试'+attempt,{});setTimeout(tryOnce,900);return;}
+      toast('字幕识别超时（网络慢或视频较长）','warn');sendLog('asr','error','字幕识别超时',{size:fileBlob&&fileBlob.size});cb&&cb('');
+    };
+    xhr.send(fileBlob);
+  }
+  tryOnce();
 }
 /* 无VAD时的默认拆分：按所有常见标点拆成多段 */
 function splitTextDefault(text){
