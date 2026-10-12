@@ -367,7 +367,7 @@ body.no-nav .bottomnav{display:none}
         <span class="harrow">›</span>
       </div>
     </div>
-    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v4.5 · 2026-10-10 19:00</span></div>
+    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v4.6 · 2026-10-10 19:40</span></div>
   </div>
 
   <!-- 底部导航：历史记录 / 门店短视频（当前） / 门店直播 -->
@@ -1288,7 +1288,7 @@ function updateCamDebug(){
   var dbg=document.getElementById('camDebug');
   if(!dbg)return;
   var ci=S.camInfo||{};
-  dbg.textContent='版本 v4.5\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
+  dbg.textContent='版本 v4.6\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
 }
 function startFpsProbe(){
   if(!v||typeof v.requestVideoFrameCallback!=='function')return;
@@ -1309,7 +1309,7 @@ function startFpsProbe(){
 }
 
 function startCamera(){
-  var vcFull={facingMode:S.front?'user':'environment',width:{ideal:1080,max:1440},height:{ideal:1440,max:1920},frameRate:{ideal:30,max:30}};
+  var vcFull={facingMode:S.front?'user':'environment',width:{ideal:1920,max:2560},height:{ideal:1440,max:1920},frameRate:{ideal:30,max:30}};
   var vcLite={facingMode:S.front?'user':'environment'};
   var ac={echoCancellation:true,noiseSuppression:true,autoGainControl:true};
   if(S.audioDeviceId){ac.deviceId={exact:S.audioDeviceId};}
@@ -1417,7 +1417,7 @@ function switchCamera(){
   if(S.recording||!S.stream)return;
   S.front=!S.front;
   var oldVid=S.stream.getVideoTracks(),aud=S.stream.getAudioTracks()[0];
-  var vc={facingMode:S.front?'user':'environment',width:{ideal:1080,max:1440},height:{ideal:1440,max:1920},frameRate:{ideal:30,max:30}};
+  var vc={facingMode:S.front?'user':'environment',width:{ideal:1920,max:2560},height:{ideal:1440,max:1920},frameRate:{ideal:30,max:30}};
   navigator.mediaDevices.getUserMedia({video:vc}).then(function(nst){
     var nt=nst.getVideoTracks()[0];
     S.stream=new MediaStream([nt,aud]);
@@ -1575,14 +1575,15 @@ function drawFrame(c,cw,ch){
 }
 
 function buildRecordStream(){
-  /* zoom==1 或已用硬件变焦时直接走原始相机流：硬件编码、时间戳精准、无重绘卡顿、无重采样糊 */
-  if(S.zoom===1 || camZoomCaps()){
+  var sw=v.videoWidth||1080, sh=v.videoHeight||1920;
+  var MAXPIX=1200000; /* 限制录制像素，避免编码器过载掉帧（视野不变，仅降采样） */
+  var needCanvas=(S.zoom!==1)||(sw*sh>MAXPIX);
+  if(!needCanvas){
+    /* 流本身已足够小：直接走原始相机流（硬件编码、时间戳精准） */
     return {stream:S.stream,clean:function(){}};
   }
-  /* zoom≠1 需要裁剪/缩放：计算画布尺寸——只做等比裁剪/降采样，绝不放大 */
-  var sw=v.videoWidth||1080, sh=v.videoHeight||1920;
-  var targetW=1080, targetH=1920;
-  var scale=Math.min(1, Math.min(targetW/sw, targetH/sh));
+  /* 等比降采样：保持取景范围不变，绝不放大 */
+  var scale=Math.min(1, Math.sqrt(MAXPIX/(sw*sh)));
   var cw=Math.max(2, Math.round(sw*scale)), ch=Math.max(2, Math.round(sh*scale));
   cw=cw-(cw%2); ch=ch-(ch%2);
   var cn=document.createElement('canvas');cn.width=cw;cn.height=ch;
@@ -1706,6 +1707,8 @@ function showSheet(kind,blob){
     /* X5 内核同层播放：避免视频默认全屏/层级置顶遮挡「去剪辑」等按钮 */
     vv.setAttribute('x5-video-player-type','h5');
     vv.setAttribute('x5-playsinline','true');
+    /* 原始录制流在微信内是镜像的：按同一镜像参数显示，保证与成片一致 */
+    vv.style.transform=S.flipH?'scaleX(-1)':'none';
     box.appendChild(vv);
   }
   $('sheet').classList.add('open');
