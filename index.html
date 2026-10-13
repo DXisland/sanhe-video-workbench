@@ -367,7 +367,7 @@ body.no-nav .bottomnav{display:none}
         <span class="harrow">›</span>
       </div>
     </div>
-    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v5.6 · 2026-10-13 09:30</span></div>
+    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v5.7 · 2026-10-13 10:20</span></div>
   </div>
 
   <!-- 底部导航：历史记录 / 门店短视频（当前） / 门店直播 -->
@@ -1292,7 +1292,7 @@ function updateCamDebug(){
   var dbg=document.getElementById('camDebug');
   if(!dbg)return;
   var ci=S.camInfo||{};
-  dbg.textContent='版本 v5.6\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
+  dbg.textContent='版本 v5.7\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
 }
 function startFpsProbe(){
   if(!v||typeof v.requestVideoFrameCallback!=='function')return;
@@ -3054,54 +3054,52 @@ function loop(){
       if(sv){try{sv.pause()}catch(e){sv.src='';}}
     };
 
-    /* 用系统分享把「文件」分享出去：企业微信/微信会弹出含「储存视频」的系统指令栏，可直接存相册 */
-    var saveViaSystemShare=function(btn){
-      if(!navigator.share){toast('当前环境不支持系统保存，请用「生成链接」','warn');return;}
-      var orig=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='下载中 0%';}
-      sendLog('save','info','系统分享开始');
+    var dl=$('savePanelDownload');
+    var shareBtn=$('savePanelShare');
+    /* 预下载成片为本地文件：进入面板即开始；点「保存到相册」时在「用户手势」内立即调起系统分享（企微弹「储存视频」）。
+       关键：navigator.share 必须在点击手势内同步调用，若先等下载完成再调用会因手势失效而静默失败 */
+    var sharedFile=null,dlErr=null,prefetching=false,prefetchProgress=0;
+    var refreshBtns=function(){
+      if(!isWx)return;
+      if(dl){dl.textContent=sharedFile?'保存到相册':(dlErr?'重新准备':('准备中 '+Math.round(prefetchProgress)+'%'));dl.disabled=!sharedFile&&!dlErr;}
+    };
+    var startPrefetch=function(){
+      if(!isWx||!navigator.share||prefetching)return;
+      prefetching=true;sharedFile=null;dlErr=null;prefetchProgress=0;refreshBtns();
+      sendLog('save','info','开始预下载成片');
       var xhr=new XMLHttpRequest();
-      xhr.open('GET',videoUrl,true);
-      xhr.responseType='blob';
-      xhr.timeout=180000;
-      xhr.onprogress=function(e){if(btn&&e.lengthComputable)btn.textContent='下载中 '+Math.round(e.loaded/e.total*100)+'%';};
-      var fail=function(msg){
-        if(btn){btn.disabled=false;btn.textContent=orig;}
-        sendLog('save','error','系统分享失败 '+msg);
-        toast('保存未完成（'+msg+'），可改用「生成链接」','warn');
-      };
+      xhr.open('GET',videoUrl,true);xhr.responseType='blob';xhr.timeout=300000;
+      xhr.onprogress=function(e){if(e.lengthComputable){prefetchProgress=e.loaded/e.total*100;refreshBtns();}};
       xhr.onload=function(){
-        if(xhr.status!==200){fail('HTTP '+xhr.status);return;}
-        var blob=xhr.response;
-        sendLog('save','info','成片已就绪',{mb:+(blob.size/1048576).toFixed(1)});
-        if(btn)btn.textContent='调起保存…';
-        var f=null;
-        try{f=new File([blob],fileName||('成片_'+Date.now()+'.mp4'),{type:blob.type||'video/mp4'});}catch(e){f=null;}
-        var canF=!!(f&&navigator.canShare&&navigator.canShare({files:[f]}));
-        sendLog('save','info','分享能力',{canShareFiles:canF});
-        var p;
-        try{p=canF?navigator.share({files:[f],title:'短视频成片'}):navigator.share({title:'短视频成片',text:fileName,url:videoUrl});}
-        catch(e){fail('分享调用异常');return;}
-        (p&&p.then?p:Promise.resolve()).then(function(){
-          if(btn){btn.disabled=false;btn.textContent=orig;}
-          sendLog('save','info','系统分享完成');
-        }).catch(function(e){
-          if(btn){btn.disabled=false;btn.textContent=orig;}
-          sendLog('save','error','系统分享失败 '+((e&&(e.name+':'+e.message))||e));
-          if(e&&e.name==='AbortError')return;
-          toast('系统保存未完成，可改用「生成链接」','warn');
-        });
+        prefetching=false;
+        if(xhr.status!==200){dlErr='HTTP '+xhr.status;refreshBtns();sendLog('save','error','预下载失败 HTTP '+xhr.status);return;}
+        var blob=xhr.response,f=null;
+        try{f=new File([blob],fileName||('成片_'+Date.now()+'.mp4'),{type:blob.type||'video/mp4'});}catch(e){f=blob;}
+        sharedFile=f;refreshBtns();
+        sendLog('save','info','预下载完成',{mb:+(blob.size/1048576).toFixed(1)});
       };
-      xhr.onerror=function(){fail('网络错误');};
-      xhr.ontimeout=function(){fail('下载超时');};
+      xhr.onerror=function(){prefetching=false;dlErr='网络错误';refreshBtns();sendLog('save','error','预下载网络错误');};
+      xhr.ontimeout=function(){prefetching=false;dlErr='下载超时';refreshBtns();sendLog('save','error','预下载超时');};
       xhr.send();
     };
-
-    var dl=$('savePanelDownload');
+    var doShare=function(){
+      if(!navigator.share){toast('当前环境不支持系统保存，请用「生成链接」','warn');return;}
+      if(!sharedFile){toast(dlErr?('准备失败（'+dlErr+'），请点「重新准备」'):('视频准备中，请稍候 '+(prefetchProgress?Math.round(prefetchProgress)+'%':'')),'warn');return;}
+      var p;
+      try{p=(navigator.canShare&&navigator.canShare({files:[sharedFile]}))?navigator.share({files:[sharedFile],title:'短视频成片'}):navigator.share({title:'短视频成片',text:fileName,url:videoUrl});}
+      catch(e){sendLog('save','error','分享调用异常');toast('保存未完成，可改用「生成链接」','warn');return;}
+      (p&&p.then?p:Promise.resolve()).then(function(){sendLog('save','info','系统分享完成');}).catch(function(e){if(e&&e.name==='AbortError')return;sendLog('save','error','分享失败 '+((e&&(e.name+':'+e.message))||e));toast('保存未完成，可改用「生成链接」','warn');});
+    };
     if(dl){
-      if(isWx)dl.textContent='保存到相册';
+      if(isWx){startPrefetch();}
       dl.onclick=function(){
-        sendLog('save','info','保存/下载文件');
-        if(isWx){saveViaSystemShare(dl);return;}
+        sendLog('save','info','点保存到相册');
+        if(isWx){
+          if(sharedFile){doShare();return;}
+          if(dlErr){dlErr=null;startPrefetch();refreshBtns();return;}
+          toast('视频准备中，请稍候 '+(prefetchProgress?Math.round(prefetchProgress)+'%':''),'warn');
+          return;
+        }
         var a=document.createElement('a');a.href=dlUrl;a.download=fileName;
         a.style.display='none';document.body.appendChild(a);a.click();
         setTimeout(function(){a.remove()},500);
@@ -3124,10 +3122,14 @@ function loop(){
     if(linkCopyBtn){
       linkCopyBtn.onclick=function(){copyText(videoUrl);toast('链接已复制','good');};
     }
-    /* 分享视频：分享「文件」（企微可存相册），不支持则退化为分享链接 */
-    var shareBtn=$('savePanelShare');
+    /* 分享视频：企微内分享「文件」（可存相册）；否则分享链接 */
     if(shareBtn){
-      shareBtn.onclick=function(){sendLog('save','info','分享视频');saveViaSystemShare(shareBtn);};
+      shareBtn.onclick=function(){
+        sendLog('save','info','分享视频');
+        if(isWx){doShare();return;}
+        if(navigator.share){try{navigator.share({title:'短视频成片',text:fileName,url:videoUrl}).catch(function(){});}catch(e){copyText(videoUrl);toast('已复制链接','good');}}
+        else{copyText(videoUrl);toast('已复制链接','good');}
+      };
     }
     var cl=$('savePanelClose');
     if(cl){cl.onclick=closePanel;}
