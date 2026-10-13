@@ -367,7 +367,7 @@ body.no-nav .bottomnav{display:none}
         <span class="harrow">›</span>
       </div>
     </div>
-    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v5.5 · 2026-10-12 18:50</span></div>
+    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v5.6 · 2026-10-13 09:30</span></div>
   </div>
 
   <!-- 底部导航：历史记录 / 门店短视频（当前） / 门店直播 -->
@@ -1292,7 +1292,7 @@ function updateCamDebug(){
   var dbg=document.getElementById('camDebug');
   if(!dbg)return;
   var ci=S.camInfo||{};
-  dbg.textContent='版本 v5.5\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
+  dbg.textContent='版本 v5.6\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
 }
 function startFpsProbe(){
   if(!v||typeof v.requestVideoFrameCallback!=='function')return;
@@ -3057,26 +3057,43 @@ function loop(){
     /* 用系统分享把「文件」分享出去：企业微信/微信会弹出含「储存视频」的系统指令栏，可直接存相册 */
     var saveViaSystemShare=function(btn){
       if(!navigator.share){toast('当前环境不支持系统保存，请用「生成链接」','warn');return;}
-      var orig=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='准备中…';}
+      var orig=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='下载中 0%';}
       sendLog('save','info','系统分享开始');
-      fetch(videoUrl).then(function(r){return r.blob()}).then(function(blob){
+      var xhr=new XMLHttpRequest();
+      xhr.open('GET',videoUrl,true);
+      xhr.responseType='blob';
+      xhr.timeout=180000;
+      xhr.onprogress=function(e){if(btn&&e.lengthComputable)btn.textContent='下载中 '+Math.round(e.loaded/e.total*100)+'%';};
+      var fail=function(msg){
+        if(btn){btn.disabled=false;btn.textContent=orig;}
+        sendLog('save','error','系统分享失败 '+msg);
+        toast('保存未完成（'+msg+'），可改用「生成链接」','warn');
+      };
+      xhr.onload=function(){
+        if(xhr.status!==200){fail('HTTP '+xhr.status);return;}
+        var blob=xhr.response;
         sendLog('save','info','成片已就绪',{mb:+(blob.size/1048576).toFixed(1)});
         if(btn)btn.textContent='调起保存…';
         var f=null;
         try{f=new File([blob],fileName||('成片_'+Date.now()+'.mp4'),{type:blob.type||'video/mp4'});}catch(e){f=null;}
         var canF=!!(f&&navigator.canShare&&navigator.canShare({files:[f]}));
         sendLog('save','info','分享能力',{canShareFiles:canF});
-        if(canF){return navigator.share({files:[f],title:'短视频成片'});}
-        return navigator.share({title:'短视频成片',text:fileName,url:videoUrl});
-      }).then(function(){
-        if(btn){btn.disabled=false;btn.textContent=orig;}
-        sendLog('save','info','系统分享完成');
-      }).catch(function(e){
-        if(btn){btn.disabled=false;btn.textContent=orig;}
-        sendLog('save','error','系统分享失败 '+((e&&(e.name+':'+e.message))||e));
-        if(e&&e.name==='AbortError')return;
-        toast('系统保存未完成，可改用「生成链接」','warn');
-      });
+        var p;
+        try{p=canF?navigator.share({files:[f],title:'短视频成片'}):navigator.share({title:'短视频成片',text:fileName,url:videoUrl});}
+        catch(e){fail('分享调用异常');return;}
+        (p&&p.then?p:Promise.resolve()).then(function(){
+          if(btn){btn.disabled=false;btn.textContent=orig;}
+          sendLog('save','info','系统分享完成');
+        }).catch(function(e){
+          if(btn){btn.disabled=false;btn.textContent=orig;}
+          sendLog('save','error','系统分享失败 '+((e&&(e.name+':'+e.message))||e));
+          if(e&&e.name==='AbortError')return;
+          toast('系统保存未完成，可改用「生成链接」','warn');
+        });
+      };
+      xhr.onerror=function(){fail('网络错误');};
+      xhr.ontimeout=function(){fail('下载超时');};
+      xhr.send();
     };
 
     var dl=$('savePanelDownload');
