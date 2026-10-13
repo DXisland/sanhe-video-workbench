@@ -367,7 +367,7 @@ body.no-nav .bottomnav{display:none}
         <span class="harrow">›</span>
       </div>
     </div>
-    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v5.3 · 2026-10-12 17:30</span></div>
+    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v5.4 · 2026-10-12 18:10</span></div>
   </div>
 
   <!-- 底部导航：历史记录 / 门店短视频（当前） / 门店直播 -->
@@ -1292,7 +1292,7 @@ function updateCamDebug(){
   var dbg=document.getElementById('camDebug');
   if(!dbg)return;
   var ci=S.camInfo||{};
-  dbg.textContent='版本 v5.3\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
+  dbg.textContent='版本 v5.4\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
 }
 function startFpsProbe(){
   if(!v||typeof v.requestVideoFrameCallback!=='function')return;
@@ -1656,7 +1656,7 @@ function doStartRecord(){
   S.recorder.ondataavailable=function(e){if(e.data&&e.data.size)S.chunks.push(e.data)};
   S.recorder.onerror=function(){try{stopRecord()}catch(_){} };
   S.recorder.onstop=onRecordStop;
-  S.recorder.start(1000);
+  S.recorder.start(500);
   S.recording=true;S.recStart=Date.now();
   sendLog('record','info','开始录制');
   S.recTimer=setInterval(function(){
@@ -1679,8 +1679,7 @@ function stopRecord(){
   S.recording=false;
   S.recDur=(Date.now()-S.recStart)/1000;
   clearInterval(S.recTimer);S.recTimer=null;
-  /* requestData 强制 flush 末尾缓冲，然后立即 stop，确保 onstop 可靠触发弹出完成面板 */
-  try{S.recorder.requestData()}catch(e){}
+  /* 直接 stop()：由内核冲刷并回调末尾 dataavailable（不要在 stop 前 requestData，易与末尾数据竞争导致丢尾） */
   try{S.recorder.stop()}catch(e){}
 }
 function onRecordStop(){
@@ -1694,12 +1693,17 @@ function onRecordStop(){
     if(blob.size<1024){toast('录像失败，请重试','bad');return}
     /* 录制流已按预览方向翻转（画布内完成），成片端不再二次翻转，避免处理方向不一致 */
     S.recMirrored=false;
+    /* 诊断：读回录制文件实际时长，与墙钟时长对比（排查丢尾） */
+    try{
+      var _u=URL.createObjectURL(blob),_tv=document.createElement('video');_tv.preload='metadata';_tv.src=_u;
+      _tv.onloadedmetadata=function(){sendLog('record','info','录制时长校验',{wall:+(S.recDur||0).toFixed(1),media:+(isFinite(_tv.duration)?_tv.duration:0).toFixed(1),size:blob.size});try{URL.revokeObjectURL(_u)}catch(e){}};
+    }catch(e){}
     sendLog('record','info','录制完成 '+(S.recDur||0).toFixed(1)+'s '+S.recMime,{size:blob.size});
     showSheet('video',blob);
     if(S.recMime.indexOf('webm')>=0)toast('当前为 WebM 格式，上传抖音前可能需要转成 MP4','warn');
   };
-  /* 延迟 400ms 再组装：部分内核（X5）末尾的 dataavailable 晚于 stop 事件，立即组装会丢掉最后一段（约2秒） */
-  setTimeout(finalize,400);
+  /* 延迟 800ms 再组装：确保内核末尾的 dataavailable 已回调（X5 常晚于 stop 事件，立即组装会丢最后一段） */
+  setTimeout(finalize,800);
 }
 function setRecUI(on){
   if(on){$('shutter').classList.add('rec');$('timer').classList.add('show')}
