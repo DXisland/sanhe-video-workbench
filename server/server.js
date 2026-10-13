@@ -458,7 +458,7 @@ async function handleCompose(req, res) {
 
   args.push('-filter_complex', fc.join(';'));
   args.push('-map', '[' + vLabel + ']', '-map', '[aout]');
-  args.push('-c:v', 'libx264', '-crf', '20', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-r', '30', '-g', '30', '-bf', '0', '-profile:v', 'main', '-level', '5.0', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart');
+  args.push('-c:v', 'libx264', '-crf', '20', '-maxrate', '5M', '-bufsize', '10M', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-r', '30', '-g', '30', '-bf', '0', '-profile:v', 'main', '-level', '5.0', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart');
   if (!hasAudio) args.push('-shortest'); /* 补静音时 anullsrc 是无限流，需限定到视频长度 */
 
   const outId = crypto.randomBytes(8).toString('hex');
