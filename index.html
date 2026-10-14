@@ -367,7 +367,7 @@ body.no-nav .bottomnav{display:none}
         <span class="harrow">›</span>
       </div>
     </div>
-    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v5.7 · 2026-10-13 10:20</span></div>
+    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v5.9 · 2026-10-13 14:00</span></div>
   </div>
 
   <!-- 底部导航：历史记录 / 门店短视频（当前） / 门店直播 -->
@@ -3042,10 +3042,15 @@ function loop(){
     if(panel)panel.classList.remove('hide');
     var linkBox=$('savePanelLinkBox');
     if(linkBox)linkBox.classList.add('hide');
-    var isWx=/micromessenger|wxwork/i.test(navigator.userAgent);
+    var isWx=/micromessenger|wxwork|wechat|mmwebsdk|miniprogram/i.test(navigator.userAgent);
+    /* 关键：不依赖 UA 判断。只要设备支持「系统分享」，就用「预下载成片 + 系统分享文件」的方式保存
+       （iOS/安卓的企业微信、微信、以及移动浏览器都适用），避免被 WebView 拦截的下载。 */
+    var canShareFiles=!!(navigator.share&&navigator.canShare);
+    var useShare=!!navigator.share;
+    sendLog('save','info','保存环境',{ua:(navigator.userAgent||'').slice(0,140),share:!!navigator.share,canShareFiles:canShareFiles,isWx:isWx});
     var hintEl=$('savePanelHint');
     if(hintEl){
-      hintEl.textContent=isWx?'你在微信/企业微信内：点「保存到相册」，在系统菜单里选「储存视频」即可存到手机相册：':'按下面三步，把视频保存到手机：';
+      hintEl.textContent=useShare?'点下方按钮，在系统菜单里选「储存视频」即可保存到手机相册：':(isWx?'点「生成链接」把链接发到聊天，再点开保存：':'点「下载文件」保存到手机：');
     }
 
     var dlUrl=videoUrl.replace(/\/v\//,'/dl/');
@@ -3060,11 +3065,11 @@ function loop(){
        关键：navigator.share 必须在点击手势内同步调用，若先等下载完成再调用会因手势失效而静默失败 */
     var sharedFile=null,dlErr=null,prefetching=false,prefetchProgress=0;
     var refreshBtns=function(){
-      if(!isWx)return;
+      if(!useShare)return;
       if(dl){dl.textContent=sharedFile?'保存到相册':(dlErr?'重新准备':('准备中 '+Math.round(prefetchProgress)+'%'));dl.disabled=!sharedFile&&!dlErr;}
     };
     var startPrefetch=function(){
-      if(!isWx||!navigator.share||prefetching)return;
+      if(!useShare||prefetching)return;
       prefetching=true;sharedFile=null;dlErr=null;prefetchProgress=0;refreshBtns();
       sendLog('save','info','开始预下载成片');
       var xhr=new XMLHttpRequest();
@@ -3091,10 +3096,10 @@ function loop(){
       (p&&p.then?p:Promise.resolve()).then(function(){sendLog('save','info','系统分享完成');}).catch(function(e){if(e&&e.name==='AbortError')return;sendLog('save','error','分享失败 '+((e&&(e.name+':'+e.message))||e));toast('保存未完成，可改用「生成链接」','warn');});
     };
     if(dl){
-      if(isWx){startPrefetch();}
+      if(useShare){startPrefetch();}
       dl.onclick=function(){
         sendLog('save','info','点保存到相册');
-        if(isWx){
+        if(useShare){
           if(sharedFile){doShare();return;}
           if(dlErr){dlErr=null;startPrefetch();refreshBtns();return;}
           toast('视频准备中，请稍候 '+(prefetchProgress?Math.round(prefetchProgress)+'%':''),'warn');
@@ -3126,7 +3131,7 @@ function loop(){
     if(shareBtn){
       shareBtn.onclick=function(){
         sendLog('save','info','分享视频');
-        if(isWx){doShare();return;}
+        if(useShare){doShare();return;}
         if(navigator.share){try{navigator.share({title:'短视频成片',text:fileName,url:videoUrl}).catch(function(){});}catch(e){copyText(videoUrl);toast('已复制链接','good');}}
         else{copyText(videoUrl);toast('已复制链接','good');}
       };
