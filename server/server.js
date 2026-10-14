@@ -427,7 +427,7 @@ async function handleCompose(req, res) {
   for (let i = 0; i < insFiles.length; i++) {
     const inp = (i + 1) + ':v';
     const st = insFiles[i].start, en = st + insFiles[i].dur;
-    fc.push('[' + inp + ']scale=' + OUT_W + ':' + OUT_H + ',setsar=1[i' + i + ']');
+    fc.push('[' + inp + ']scale=' + OUT_W + ':' + OUT_H + ':force_original_aspect_ratio=increase,crop=' + OUT_W + ':' + OUT_H + ',setsar=1,setpts=PTS-STARTPTS+' + st.toFixed(3) + '/TB[i' + i + ']');
     fc.push('[' + last + '][i' + i + ']overlay=0:0:enable=\'between(t,' + st.toFixed(3) + ',' + en.toFixed(3) + ')\':eof_action=pass[m' + (i + 1) + ']');
     last = 'm' + (i + 1);
   }
