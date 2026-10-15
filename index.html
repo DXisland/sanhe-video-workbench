@@ -367,7 +367,7 @@ body.no-nav .bottomnav{display:none}
         <span class="harrow">›</span>
       </div>
     </div>
-    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v5.12 · 2026-10-14 10:00</span><br><span style="display:inline-block;margin-top:5px;padding:3px 10px;border-radius:8px;background:#eef7ee;color:#1a7f37;font-weight:800;font-size:13px">当前域名：<span id="verHost">—</span></span></div>
+    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v5.13 · 2026-10-14 10:30</span><br><span style="display:inline-block;margin-top:5px;padding:3px 10px;border-radius:8px;background:#eef7ee;color:#1a7f37;font-weight:800;font-size:13px">当前域名：<span id="verHost">—</span></span></div>
   </div>
 
   <!-- 底部导航：历史记录 / 门店短视频（当前） / 门店直播 -->
@@ -404,22 +404,10 @@ body.no-nav .bottomnav{display:none}
       <div class="field">
         <label>产品 / 服务<em>*</em></label>
         <select class="fselect" id="fProduct">
-          <option value="">请选择热门机型</option>
-          <option>iPhone 16 Pro Max</option>
-          <option>iPhone 16 Pro</option>
-          <option>iPhone 16</option>
-          <option>iPhone 15 Pro Max</option>
-          <option>iPhone 15</option>
-          <option>华为 Mate 70 Pro</option>
-          <option>华为 Mate 60 Pro</option>
-          <option>华为 Pura 70 Pro</option>
-          <option>小米 15 Ultra</option>
-          <option>小米 15</option>
-          <option>Redmi K80 Pro</option>
-          <option>OPPO Find X8 Pro</option>
-          <option>vivo X200 Pro</option>
-          <option>荣耀 Magic7 Pro</option>
-          <option>一加 13</option>
+          <option value="">请选择产品 / 服务</option>
+          <option>Nova16SE</option>
+          <option>宽带</option>
+          <option>荣耀畅玩80Plus</option>
         </select>
       </div>
       <div class="field">
@@ -1294,7 +1282,7 @@ function updateCamDebug(){
   var dbg=document.getElementById('camDebug');
   if(!dbg)return;
   var ci=S.camInfo||{};
-  dbg.textContent='v5.12 · '+location.host+'\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
+  dbg.textContent='v5.13 · '+location.host+'\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
 }
 function startFpsProbe(){
   if(!v||typeof v.requestVideoFrameCallback!=='function')return;
