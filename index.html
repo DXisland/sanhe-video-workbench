@@ -337,7 +337,7 @@ body.no-nav .bottomnav{display:none}
   </div>
   <div class="scroller">
     <div class="homecards">
-      <div class="hcard hide" data-go="prep">
+      <div class="hcard" data-go="prep">
         <div class="hicon g1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M9.5 12l1.8 1.8L15 9.5"/></svg></div>
         <div class="hcontent">
           <h3>脚本生成</h3>
@@ -367,7 +367,7 @@ body.no-nav .bottomnav{display:none}
         <span class="harrow">›</span>
       </div>
     </div>
-    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v5.11 · 2026-10-13 15:30</span><br><span style="display:inline-block;margin-top:5px;padding:3px 10px;border-radius:8px;background:#eef7ee;color:#1a7f37;font-weight:800;font-size:13px">当前域名：<span id="verHost">—</span></span></div>
+    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v5.12 · 2026-10-14 10:00</span><br><span style="display:inline-block;margin-top:5px;padding:3px 10px;border-radius:8px;background:#eef7ee;color:#1a7f37;font-weight:800;font-size:13px">当前域名：<span id="verHost">—</span></span></div>
   </div>
 
   <!-- 底部导航：历史记录 / 门店短视频（当前） / 门店直播 -->
@@ -1294,7 +1294,7 @@ function updateCamDebug(){
   var dbg=document.getElementById('camDebug');
   if(!dbg)return;
   var ci=S.camInfo||{};
-  dbg.textContent='v5.11 · '+location.host+'\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
+  dbg.textContent='v5.12 · '+location.host+'\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
 }
 function startFpsProbe(){
   if(!v||typeof v.requestVideoFrameCallback!=='function')return;
