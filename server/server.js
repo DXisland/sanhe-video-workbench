@@ -231,26 +231,30 @@ a.btn.alt{background:#2b2f36}
 <video src="${raw}" controls playsinline webkit-playsinline preload="metadata"></video>
 <div class="wrap">
   <div class="name">${name}</div>
-  <a class="btn" id="dl" href="${dl}">保存视频</a>
+  <a class="btn" id="save" href="javascript:void(0)">保存到相册</a>
+  <a class="btn alt" id="dl" href="${dl}">下载到文件</a>
   <a class="btn alt" id="copy" href="javascript:void(0)">复制本页链接</a>
-  <div class="hint" id="hint" style="display:none;padding:12px 0 0"></div>
+  <div class="hint" style="padding:12px 0 0">保存到相册：点「保存到相册」→ 在系统菜单里选「储存视频」；或<b>长按上方视频</b> → 储存视频。</div>
   <div class="tip" id="tip"></div>
 </div>
 <script>
 (function(){
-  var ua=navigator.userAgent||'';
-  var isWx=/micromessenger|wxwork/i.test(ua);
+  var raw='${raw}', name='${name}';
   var tip=document.getElementById('tip');
-  var hint=document.getElementById('hint');
   function showTip(html){tip.innerHTML=html;tip.className='tip on';}
-  if(isWx){
-    hint.style.display='block';
-    hint.innerHTML='你在微信/企业微信内打开，浏览器下载可能被拦截。';
-  }
-  document.getElementById('dl').onclick=function(e){
-    if(!isWx)return; /* 正常浏览器直接走 attachment 下载 */
-    e.preventDefault();
-    showTip('微信内可能无法直接保存，请按下面步骤：<br>1. 点右上角 <b>···</b> 菜单<br>2. 选择 <b>在浏览器中打开</b><br>3. 回到本页再点 <b>保存视频</b><br><br>仍然失败？点右上角菜单里的「复制链接」，在系统浏览器粘贴打开后保存。');
+  document.getElementById('save').onclick=function(){
+    var btn=this;
+    if(!navigator.share){ showTip('当前浏览器不支持一键保存，请用「下载到文件」，或长按视频选择「储存视频」。'); return; }
+    btn.textContent='准备中…';
+    fetch(raw).then(function(r){return r.blob()}).then(function(b){
+      var f; try{f=new File([b],name||'video.mp4',{type:'video/mp4'});}catch(e){f=b;}
+      var p=(navigator.canShare&&navigator.canShare({files:[f]}))?navigator.share({files:[f],title:name}):navigator.share({url:location.href,title:name});
+      return p;
+    }).then(function(){ btn.textContent='保存到相册'; }).catch(function(e){
+      btn.textContent='保存到相册';
+      if(e&&e.name==='AbortError')return;
+      showTip('没弹出菜单？<b>长按上方视频</b>选择「储存视频」，或点「下载到文件」。');
+    });
   };
   document.getElementById('copy').onclick=function(){
     var t=location.href;
