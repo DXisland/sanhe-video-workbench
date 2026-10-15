@@ -41,6 +41,7 @@ const config = {
   corpSecret: process.env.WX_CORP_SECRET || '',
   agentId: process.env.WX_AGENT_ID || '',
   maxBytes: 500 * 1024 * 1024,
+  statsKey: process.env.STATS_KEY || 'sanhe666',
 };
 
 const videoDir = path.join(config.dataDir, 'v');
@@ -778,6 +779,154 @@ function handleGetLogs(req, res) {
   });
 }
 
+/* ---------- 使用统计看板（口令访问） ---------- */
+let _statsCache = { t: 0, data: null };
+function readAllLogEntries() {
+  const out = [];
+  try {
+    const files = fs.readdirSync(logsDir).filter((f) => /\.jsonl$/.test(f)).sort();
+    for (const f of files) {
+      try {
+        const txt = fs.readFileSync(path.join(logsDir, f), 'utf8');
+        for (const line of txt.split('\n')) {
+          if (!line.trim()) continue;
+          try { out.push(JSON.parse(line)); } catch (e) { /* 跳过坏行 */ }
+        }
+      } catch (e) { /* 跳过坏文件 */ }
+    }
+  } catch (e) { /* 目录不存在 */ }
+  return out;
+}
+function dayKeyOf(ts) { const d = new Date(ts || 0); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function clickKind(e) {
+  if (e.t === 'subtitle' && /开始生成字幕/.test(e.m)) return 'subtitle';
+  if (e.t === 'compose' && /开始云端合成/.test(e.m)) return 'compose';
+  if (e.t === 'save' && /点保存到相册|保存\/下载文件|开始预下载/.test(e.m)) return 'save';
+  if (e.t === 'save' && /生成链接/.test(e.m)) return 'link';
+  return null;
+}
+function computeStats() {
+  const now = Date.now();
+  if (_statsCache.data && now - _statsCache.t < 60000) return _statsCache.data;
+  const entries = readAllLogEntries();
+  const total = { clicks: 0, subtitle: 0, compose: 0, save: 0, link: 0, flows: 0, composed: 0, errors: 0, plays: 0, users: {} };
+  const byDay = {};
+  const sess = {};
+  for (const e of entries) {
+    const day = dayKeyOf(e.ts);
+    if (!byDay[day]) byDay[day] = { day, clicks: 0, flows: 0, composed: 0, errors: 0, plays: 0 };
+    if (e.t === 'usage' && /页面打开/.test(e.m)) { total.plays++; byDay[day].plays++; }
+    if (e.l === 'error') { total.errors++; byDay[day].errors++; }
+    const c = clickKind(e);
+    if (c) { total.clicks++; byDay[day].clicks++; total[c]++; }
+    if (e.t === 'compose' && /合成成功/.test(e.m)) { total.composed++; byDay[day].composed++; }
+    if (e.u) total.users[e.u] = 1;
+    const s = e.s || '';
+    if (s) {
+      if (!sess[s]) sess[s] = { record: 0, sub: 0, comp: 0, save: 0, day };
+      if (e.t === 'record') sess[s].record = 1;
+      if (e.t === 'subtitle') sess[s].sub = 1;
+      if (e.t === 'compose' && /合成成功/.test(e.m)) sess[s].comp = 1;
+      if (e.t === 'save' && /点保存到相册|生成链接|系统分享完成|预下载完成/.test(e.m)) sess[s].save = 1;
+    }
+  }
+  for (const k in sess) { const x = sess[k]; if (x.record && x.sub && x.comp && x.save) { total.flows++; if (byDay[x.day]) byDay[x.day].flows++; } }
+  const days = Object.keys(byDay).sort().slice(-7).reverse().map((d) => byDay[d]);
+  const data = {
+    ok: true, generatedAt: now,
+    total: { clicks: total.clicks, subtitle: total.subtitle, compose: total.compose, save: total.save, link: total.link, flows: total.flows, composed: total.composed, errors: total.errors, plays: total.plays, users: Object.keys(total.users).length },
+    days,
+  };
+  _statsCache = { t: now, data };
+  return data;
+}
+function statsPageHtml() {
+  return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>使用统计</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f4f5f7;color:#222;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+header{background:#1f2430;color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center}
+header h1{font-size:17px;margin:0}
+.cards{display:flex;gap:12px;padding:16px 20px 0;flex-wrap:wrap}
+.card{background:#fff;border-radius:12px;padding:16px 18px;min-width:140px;flex:1;box-shadow:0 1px 3px rgba(0,0,0,.07)}
+.card .n{font-size:30px;font-weight:800}
+.card .lab{font-size:13px;color:#888;margin-top:4px}
+.n.ok{color:#1a9e5c}.n.blue{color:#2e5bff}.n.orange{color:#e88b00}.n.err{color:#e5322d}
+.sec{padding:8px 20px 30px}
+h2{font-size:14px;color:#667;margin:18px 0 8px}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+th,td{padding:9px 12px;font-size:13px;border-bottom:1px solid #f0f0f0;text-align:center}
+th{background:#fafbfc;color:#667;font-weight:600}
+td:first-child,th:first-child{text-align:left}
+#gate{max-width:360px;margin:80px auto;background:#fff;padding:24px;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.08);text-align:center}
+#gate input{width:100%;padding:12px;font-size:16px;border:1px solid #ddd;border-radius:10px;margin:12px 0}
+#gate button{width:100%;padding:12px;font-size:16px;font-weight:700;border:0;border-radius:10px;background:#1f2430;color:#fff}
+.err-msg{color:#e5322d;font-size:13px;min-height:18px}
+</style></head><body>
+<div id="gate">
+  <h2 style="margin-top:0">🔒 使用统计</h2>
+  <div style="color:#888;font-size:13px">请输入访问口令</div>
+  <input id="key" type="password" placeholder="口令" autocomplete="off">
+  <button id="go">查看</button>
+  <div class="err-msg" id="err"></div>
+</div>
+<div id="main" style="display:none">
+  <header><h1>门店短视频 · 使用统计</h1><span id="clock" style="font-size:12px;color:#9aa3b2"></span></header>
+  <div class="cards">
+    <div class="card"><div class="n blue" id="c_clicks">0</div><div class="lab">总点击（关键操作）</div></div>
+    <div class="card"><div class="n ok" id="c_flows">0</div><div class="lab">全流程完成</div></div>
+    <div class="card"><div class="n orange" id="c_composed">0</div><div class="lab">已合成视频</div></div>
+    <div class="card"><div class="n err" id="c_errors">0</div><div class="lab">报错</div></div>
+  </div>
+  <div class="cards">
+    <div class="card"><div class="n" id="c_plays">0</div><div class="lab">打开次数</div></div>
+    <div class="card"><div class="n" id="c_users">0</div><div class="lab">用户数</div></div>
+    <div class="card"><div class="n" id="c_sub">0</div><div class="lab">生成字幕</div></div>
+    <div class="card"><div class="n" id="c_comp">0</div><div class="lab">合成操作</div></div>
+    <div class="card"><div class="n" id="c_save">0</div><div class="lab">保存操作</div></div>
+  </div>
+  <div class="sec">
+    <h2>近 7 天</h2>
+    <table><thead><tr><th>日期</th><th>点击</th><th>全流程完成</th><th>合成视频</th><th>报错</th></tr></thead><tbody id="days"></tbody></table>
+    <div style="text-align:center;margin-top:16px"><span id="host" style="color:#aaa;font-size:12px"></span></div>
+  </div>
+</div>
+<script>
+var key=localStorage.getItem('statsKey')||'';
+function esc(s){return String(s||'').replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})}
+function load(){
+  fetch('/api/stats?key='+encodeURIComponent(key)).then(function(r){
+    if(r.status===401){localStorage.removeItem('statsKey');document.getElementById('gate').style.display='block';document.getElementById('main').style.display='none';document.getElementById('err').textContent='口令错误';return null;}
+    return r.json();
+  }).then(function(d){
+    if(!d||!d.ok)return;
+    localStorage.setItem('statsKey',key);
+    document.getElementById('gate').style.display='none';document.getElementById('main').style.display='block';
+    var t=d.total;
+    document.getElementById('c_clicks').textContent=t.clicks;
+    document.getElementById('c_flows').textContent=t.flows;
+    document.getElementById('c_composed').textContent=t.composed;
+    document.getElementById('c_errors').textContent=t.errors;
+    document.getElementById('c_plays').textContent=t.plays;
+    document.getElementById('c_users').textContent=t.users;
+    document.getElementById('c_sub').textContent=t.subtitle;
+    document.getElementById('c_comp').textContent=t.compose;
+    document.getElementById('c_save').textContent=t.save;
+    document.getElementById('clock').textContent='更新于 '+new Date(d.generatedAt).toLocaleTimeString('zh-CN',{hour12:false});
+    var rows='';d.days.forEach(function(x){rows+='<tr><td>'+esc(x.day)+'</td><td>'+x.clicks+'</td><td>'+x.flows+'</td><td>'+x.composed+'</td><td'+(x.errors?' style="color:#e5322d;font-weight:700"':'')+'>'+x.errors+'</td></tr>';});
+    document.getElementById('days').innerHTML=rows||'<tr><td colspan="5" style="color:#aaa">暂无数据</td></tr>';
+    document.getElementById('host').textContent=location.host;
+  }).catch(function(){document.getElementById('err').textContent='网络错误';});
+}
+document.getElementById('go').onclick=function(){key=document.getElementById('key').value.trim();load();};
+document.getElementById('key').addEventListener('keydown',function(e){if(e.key==='Enter'){key=this.value.trim();load();}});
+if(key)load();else document.getElementById('key').focus();
+setInterval(function(){if(document.getElementById('main').style.display!=='none')load();},30000);
+</script>
+</body></html>`;
+}
+
 function adminPageHtml() {
   return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -891,6 +1040,16 @@ function handleRequest(req, res) {
   }
   if (req.method === 'GET' && pathname === '/api/logs') {
     handleGetLogs(req, res);
+    return;
+  }
+  if (req.method === 'GET' && pathname === '/api/stats') {
+    if (String(query.get('key') || '') !== config.statsKey) { sendJson(res, 401, { ok: false, error: '口令错误' }); return; }
+    sendJson(res, 200, computeStats());
+    return;
+  }
+  if (req.method === 'GET' && pathname === '/stats') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(statsPageHtml());
     return;
   }
   if (req.method === 'GET' && pathname === '/admin') {
