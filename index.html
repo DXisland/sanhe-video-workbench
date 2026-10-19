@@ -367,7 +367,7 @@ body.no-nav .bottomnav{display:none}
         <span class="harrow">›</span>
       </div>
     </div>
-    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v5.14 · 2026-10-14 11:00</span><br><span style="display:inline-block;margin-top:5px;padding:3px 10px;border-radius:8px;background:#eef7ee;color:#1a7f37;font-weight:800;font-size:13px">当前域名：<span id="verHost">—</span></span></div>
+    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v5.15 · 2026-10-19 18:00</span><br><span style="display:inline-block;margin-top:5px;padding:3px 10px;border-radius:8px;background:#eef7ee;color:#1a7f37;font-weight:800;font-size:13px">当前域名：<span id="verHost">—</span></span></div>
   </div>
 
   <!-- 底部导航：历史记录 / 门店短视频（当前） / 门店直播 -->
@@ -553,12 +553,12 @@ body.no-nav .bottomnav{display:none}
         <button id="savePanelX" style="position:absolute;top:8px;right:10px;width:32px;height:32px;border:none;background:#f0f0f0;border-radius:50%;font-size:16px;line-height:1;color:#333;cursor:pointer">✕</button>
         <div style="font-size:16px;font-weight:800;color:#333;margin-bottom:10px;padding-right:28px">保存成片到手机</div>
         <video id="savePanelVideo" controls playsinline webkit-playsinline x5-video-player-type="h5" x5-playsinline="true" style="width:100%;border-radius:10px;background:#000;max-height:34vh;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto;touch-action:manipulation"></video>
-        <p id="savePanelHint" style="font-size:13px;color:#666;margin:10px 0 6px;line-height:1.6">点下方按钮，把成片保存到手机相册：</p>
+        <p id="savePanelHint" style="font-size:13px;color:#666;margin:10px 0 6px;line-height:1.6">按下面步骤，把视频保存到手机：</p>
         <div style="text-align:left;background:#f6f7f9;border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:12.5px;line-height:1.95;color:#444">
-          <b style="color:#222">保存方法：</b><br>
-          ① 点 <b>「保存到相册」</b>（正在把成片下载到手机，按钮显示「准备中 X%」，属正常）<br>
-          ② <b>等按钮变成「保存到相册」后点它</b> → 在系统菜单里选 <b>「储存视频」</b><br>
-          ③ 若没弹出菜单，会自动用<b>新窗口打开成片</b>：<b>长按视频</b>，或点右上角「···」→「储存视频」
+          <b style="color:#222">保存步骤：</b><br>
+          ① 点 <b>「保存到相册」</b>，按钮显示「准备中 X%」时是在把成片下载到手机<br>
+          ② 等按钮变成 <b>「保存到相册」</b> 后再点一次<br>
+          ③ 在弹出的系统菜单里选 <b>「储存视频」</b>，即可存到手机相册
         </div>
         <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
           <button id="savePanelDownload" class="abtn primary" style="flex:1;min-width:110px">下载文件</button>
@@ -670,7 +670,7 @@ body.no-nav .bottomnav{display:none}
       <button class="btn ghost" id="retakeBtn">重拍</button>
       <button class="btn ghost" id="toEditBtn">去剪辑</button>
     </div>
-    <div id="hint">点「保存到相册」→ 在系统菜单里选「储存视频」即可保存；企业微信里若没弹菜单，会自动用新窗口打开，长按视频保存。</div>
+    <div id="hint">点「保存到相册」，等准备中到 100% 后再点一次，在系统菜单里选「储存视频」即可</div>
   </div>
 
   <div id="landscape">请旋转手机为竖屏使用<br>本工具仅支持竖屏拍摄</div>
@@ -1282,7 +1282,7 @@ function updateCamDebug(){
   var dbg=document.getElementById('camDebug');
   if(!dbg)return;
   var ci=S.camInfo||{};
-  dbg.textContent='v5.14 · '+location.host+'\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
+  dbg.textContent='v5.15 · '+location.host+'\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
 }
 function startFpsProbe(){
   if(!v||typeof v.requestVideoFrameCallback!=='function')return;
@@ -3078,20 +3078,12 @@ function loop(){
       xhr.send();
     };
     var doShare=function(){
-      if(!navigator.share){toast('已用新窗口打开成片，长按视频保存','warn');try{window.open(videoUrl,'_blank');}catch(_){try{location.href=videoUrl;}catch(__){}}return;}
+      if(!navigator.share){toast('当前环境不支持系统保存，请用「生成链接」','warn');return;}
       if(!sharedFile){toast(dlErr?('准备失败（'+dlErr+'），请点「重新准备」'):('视频准备中，请稍候 '+(prefetchProgress?Math.round(prefetchProgress)+'%':'')),'warn');return;}
       var p;
       try{p=(navigator.canShare&&navigator.canShare({files:[sharedFile]}))?navigator.share({files:[sharedFile],title:'短视频成片'}):navigator.share({title:'短视频成片',text:fileName,url:videoUrl});}
-      catch(e){sendLog('save','error','分享调用异常');toast('已用新窗口打开成片，长按视频保存','warn');try{window.open(videoUrl,'_blank');}catch(_){try{location.href=videoUrl;}catch(__){}}return;}
-      (p&&p.then?p:Promise.resolve()).then(function(){sendLog('save','info','系统分享完成');}).catch(function(e){
-        if(e&&e.name==='AbortError')return;
-        sendLog('save','error','分享失败 '+((e&&(e.name+':'+e.message))||e));
-        /* 企业微信等 iframe 环境禁止 share()：改用新窗口打开成片，用系统/微信播放器保存 */
-        toast('已在新窗口打开成片：长按视频，或点右上角「···」选「储存视频」','warn');
-        var opened=null;
-        try{opened=window.open(videoUrl,'_blank');}catch(_){opened=null;}
-        if(!opened){try{location.href=videoUrl;}catch(__){}}
-      });
+      catch(e){sendLog('save','error','分享调用异常');toast('保存未完成，可改用「生成链接」','warn');return;}
+      (p&&p.then?p:Promise.resolve()).then(function(){sendLog('save','info','系统分享完成');}).catch(function(e){if(e&&e.name==='AbortError')return;sendLog('save','error','分享失败 '+((e&&(e.name+':'+e.message))||e));toast('保存未完成，可改用「生成链接」','warn');});
     };
     if(dl){
       if(useShare){startPrefetch();}
