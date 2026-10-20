@@ -367,7 +367,7 @@ body.no-nav .bottomnav{display:none}
         <span class="harrow">›</span>
       </div>
     </div>
-    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v5.15 · 2026-10-19 18:00</span><br><span style="display:inline-block;margin-top:5px;padding:3px 10px;border-radius:8px;background:#eef7ee;color:#1a7f37;font-weight:800;font-size:13px">当前域名：<span id="verHost">—</span></span></div>
+    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v5.16 · 2026-10-20 08:55</span><br><span style="display:inline-block;margin-top:5px;padding:3px 10px;border-radius:8px;background:#eef7ee;color:#1a7f37;font-weight:800;font-size:13px">当前域名：<span id="verHost">—</span></span></div>
   </div>
 
   <!-- 底部导航：历史记录 / 门店短视频（当前） / 门店直播 -->
@@ -556,8 +556,8 @@ body.no-nav .bottomnav{display:none}
         <p id="savePanelHint" style="font-size:13px;color:#666;margin:10px 0 6px;line-height:1.6">按下面步骤，把视频保存到手机：</p>
         <div style="text-align:left;background:#f6f7f9;border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:12.5px;line-height:1.95;color:#444">
           <b style="color:#222">保存步骤：</b><br>
-          ① 点 <b>「保存到相册」</b>，按钮显示「准备中 X%」时是在把成片下载到手机<br>
-          ② 等按钮变成 <b>「保存到相册」</b> 后再点一次<br>
+          ① 点 <b>「保存到相册」</b><br>
+          ② 若显示「准备中 X%」，等按钮变成 <b>「保存到相册」</b> 后再点一次<br>
           ③ 在弹出的系统菜单里选 <b>「储存视频」</b>，即可存到手机相册
         </div>
         <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
@@ -1282,7 +1282,7 @@ function updateCamDebug(){
   var dbg=document.getElementById('camDebug');
   if(!dbg)return;
   var ci=S.camInfo||{};
-  dbg.textContent='v5.15 · '+location.host+'\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
+  dbg.textContent='v5.16 · '+location.host+'\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
 }
 function startFpsProbe(){
   if(!v||typeof v.requestVideoFrameCallback!=='function')return;
@@ -3037,10 +3037,14 @@ function loop(){
        （iOS/安卓的企业微信、微信、以及移动浏览器都适用），避免被 WebView 拦截的下载。 */
     var canShareFiles=!!(navigator.share&&navigator.canShare);
     var useShare=!!navigator.share;
-    sendLog('save','info','保存环境',{ua:(navigator.userAgent||'').slice(0,140),share:!!navigator.share,canShareFiles:canShareFiles,isWx:isWx});
+    /* 企业微信会把网页放进跨域 iframe，浏览器禁止第三方 iframe 调 navigator.share（NotAllowedError）。
+       这种情况改用「在顶级窗口打开保存页」：保存页会提前下载成片，点一下即可弹系统菜单。 */
+    var inIframe=false;
+    try{inIframe=(window.self!==window.top);}catch(e){inIframe=true;}
+    sendLog('save','info','保存环境',{ua:(navigator.userAgent||'').slice(0,140),share:!!navigator.share,canShareFiles:canShareFiles,isWx:isWx,inIframe:inIframe});
     var hintEl=$('savePanelHint');
     if(hintEl){
-      hintEl.textContent=useShare?'点下方按钮，在系统菜单里选「储存视频」即可保存到手机相册：':(isWx?'点「生成链接」把链接发到聊天，再点开保存：':'点「下载文件」保存到手机：');
+      hintEl.textContent=inIframe?'企业微信内限制直接分享：点「保存到相册」会打开保存页，准备好后点「保存到相册」→ 选「储存视频」：':(useShare?'点下方按钮，在系统菜单里选「储存视频」即可保存到手机相册：':(isWx?'点「生成链接」把链接发到聊天，再点开保存：':'点「下载文件」保存到手机：'));
     }
 
     var dlUrl=videoUrl.replace(/\/v\//,'/dl/');
@@ -3078,6 +3082,17 @@ function loop(){
       xhr.send();
     };
     var doShare=function(){
+      if(inIframe){
+        /* 第三方 iframe 禁止 share()，在顶级窗口打开保存页（保存页会预下载，点一下即可弹系统菜单） */
+        var target=videoUrl;
+        try{target=new URL(videoUrl,location.href).href;}catch(e){}
+        var w=null;
+        try{w=window.open(target,'_blank');}catch(e){}
+        sendLog('save','info','iframe内打开保存页');
+        if(w){toast('已打开保存页：点「保存到相册」→ 选「储存视频」','good');}
+        else{toast('请长按上方视频，选择「储存视频」','warn');}
+        return;
+      }
       if(!navigator.share){toast('当前环境不支持系统保存，请用「生成链接」','warn');return;}
       if(!sharedFile){toast(dlErr?('准备失败（'+dlErr+'），请点「重新准备」'):('视频准备中，请稍候 '+(prefetchProgress?Math.round(prefetchProgress)+'%':'')),'warn');return;}
       var p;
@@ -3086,9 +3101,11 @@ function loop(){
       (p&&p.then?p:Promise.resolve()).then(function(){sendLog('save','info','系统分享完成');}).catch(function(e){if(e&&e.name==='AbortError')return;sendLog('save','error','分享失败 '+((e&&(e.name+':'+e.message))||e));toast('保存未完成，可改用「生成链接」','warn');});
     };
     if(dl){
-      if(useShare){startPrefetch();}
+      if(useShare&&!inIframe){startPrefetch();}
+      if(inIframe){dl.textContent='保存到相册';dl.disabled=false;}
       dl.onclick=function(){
         sendLog('save','info','点保存到相册');
+        if(inIframe){doShare();return;}
         if(useShare){
           if(sharedFile){doShare();return;}
           if(dlErr){dlErr=null;startPrefetch();refreshBtns();return;}

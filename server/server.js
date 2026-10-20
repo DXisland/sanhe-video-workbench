@@ -232,26 +232,47 @@ a.btn.alt{background:#2b2f36}
 <video src="${raw}" controls playsinline webkit-playsinline preload="metadata"></video>
 <div class="wrap">
   <div class="name">${name}</div>
-  <a class="btn" id="dl" href="${dl}">保存视频</a>
+  <a class="btn" id="save" href="javascript:void(0)">准备中 0%</a>
+  <a class="btn alt" id="dl" href="${dl}">下载到文件</a>
   <a class="btn alt" id="copy" href="javascript:void(0)">复制本页链接</a>
-  <div class="hint" id="hint" style="display:none;padding:12px 0 0"></div>
+  <div class="hint" id="hint">正在把成片准备到手机，准备好后点「保存到相册」，在系统菜单里选「储存视频」。</div>
   <div class="tip" id="tip"></div>
 </div>
 <script>
 (function(){
-  var ua=navigator.userAgent||'';
-  var isWx=/micromessenger|wxwork/i.test(ua);
-  var tip=document.getElementById('tip');
+  var raw='${raw}', name='${name}';
+  var btn=document.getElementById('save');
   var hint=document.getElementById('hint');
+  var tip=document.getElementById('tip');
   function showTip(html){tip.innerHTML=html;tip.className='tip on';}
-  if(isWx){
-    hint.style.display='block';
-    hint.innerHTML='你在微信/企业微信内打开，浏览器下载可能被拦截。';
+  function setBtn(txt,disabled){btn.textContent=txt;if(disabled)btn.setAttribute('disabled','');else btn.removeAttribute('disabled');}
+  var file=null, err=null;
+  function start(){
+    file=null;err=null;setBtn('准备中 0%',true);hint.textContent='正在把成片准备到手机…';
+    var xhr=new XMLHttpRequest();
+    xhr.open('GET',raw,true);xhr.responseType='blob';xhr.timeout=300000;
+    xhr.onprogress=function(e){if(e.lengthComputable)setBtn('准备中 '+Math.round(e.loaded/e.total*100)+'%',true);};
+    xhr.onload=function(){
+      if(xhr.status!==200){err='HTTP '+xhr.status;setBtn('重新准备',false);hint.textContent='准备失败（'+err+'），请点「重新准备」';return;}
+      var f=null;
+      try{f=new File([xhr.response],name||('成片_'+Date.now()+'.mp4'),{type:xhr.response.type||'video/mp4'});}catch(e){f=xhr.response;}
+      file=f;setBtn('保存到相册',false);
+      hint.textContent='成片已准备好：点「保存到相册」→ 在系统菜单里选「储存视频」';
+    };
+    xhr.onerror=function(){err='网络错误';setBtn('重新准备',false);hint.textContent='网络错误，请点「重新准备」';};
+    xhr.ontimeout=function(){err='下载超时';setBtn('重新准备',false);hint.textContent='下载超时，请点「重新准备」';};
+    xhr.send();
   }
-  document.getElementById('dl').onclick=function(e){
-    if(!isWx)return; /* 正常浏览器直接走 attachment 下载 */
-    e.preventDefault();
-    showTip('微信内可能无法直接保存，请按下面步骤：<br>1. 点右上角 <b>···</b> 菜单<br>2. 选择 <b>在浏览器中打开</b><br>3. 回到本页再点 <b>保存视频</b><br><br>仍然失败？点右上角菜单里的「复制链接」，在系统浏览器粘贴打开后保存。');
+  btn.onclick=function(){
+    if(!file){if(err)start();return;}
+    if(!navigator.share){showTip('当前浏览器不支持一键保存，请点「下载到文件」，或长按上方视频选择「储存视频」。');return;}
+    var p;
+    try{p=(navigator.canShare&&navigator.canShare({files:[file]}))?navigator.share({files:[file],title:name||'短视频成片'}):navigator.share({title:name||'短视频成片',url:location.href});}
+    catch(e){showTip('没弹出菜单？<b>长按上方视频</b>选择「储存视频」，或点「下载到文件」。');return;}
+    (p&&p.then?p:Promise.resolve()).catch(function(e){
+      if(e&&e.name==='AbortError')return;
+      showTip('没弹出菜单？<b>长按上方视频</b>选择「储存视频」，或点「下载到文件」。');
+    });
   };
   document.getElementById('copy').onclick=function(){
     var t=location.href;
@@ -259,6 +280,7 @@ a.btn.alt{background:#2b2f36}
       navigator.clipboard.writeText(t).then(function(){showTip('<span class="ok">链接已复制</span>');},function(){window.prompt('长按复制链接：',t);});
     }else{window.prompt('长按复制链接：',t);}
   };
+  start();
 })();
 </script>
 </body>
