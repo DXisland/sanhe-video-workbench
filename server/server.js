@@ -241,36 +241,58 @@ a.btn.alt{background:#2b2f36}
 <script>
 (function(){
   var raw='${raw}', name='${name}';
+  var sid='',user='';
+  try{
+    var ms=/[?&]s=([^&]+)/.exec(location.search);
+    var mu=/[?&]u=([^&]+)/.exec(location.search);
+    if(ms)sid=decodeURIComponent(ms[1]);
+    if(mu)user=decodeURIComponent(mu[1]);
+    if(!user)user=localStorage.getItem('kz_user_id')||'anon';
+  }catch(e){}
+  if(!sid)sid='sv_'+Math.random().toString(36).slice(2,10);
+  if(!user)user='anon';
+  function log(m,level,extra){
+    try{
+      var item={u:user,s:sid,d:navigator.userAgent||'',t:'save',l:level||'info',m:m||'',e:extra||null};
+      var body=JSON.stringify([item]);
+      if(navigator.sendBeacon&&navigator.sendBeacon('/api/log',new Blob([body],{type:'application/json'})))return;
+      var xhr=new XMLHttpRequest();xhr.open('POST','/api/log',true);xhr.setRequestHeader('Content-Type','application/json');xhr.send(body);
+    }catch(e){}
+  }
   var btn=document.getElementById('save');
   var hint=document.getElementById('hint');
   var tip=document.getElementById('tip');
   function showTip(html){tip.innerHTML=html;tip.className='tip on';}
   function setBtn(txt,disabled){btn.textContent=txt;if(disabled)btn.setAttribute('disabled','');else btn.removeAttribute('disabled');}
-  var file=null, err=null;
+  var file=null, err=null, started=false;
   function start(){
+    if(!started){started=true;log('开始预下载成片');}
     file=null;err=null;setBtn('准备中 0%',true);hint.textContent='正在把成片准备到手机…';
     var xhr=new XMLHttpRequest();
     xhr.open('GET',raw,true);xhr.responseType='blob';xhr.timeout=300000;
     xhr.onprogress=function(e){if(e.lengthComputable)setBtn('准备中 '+Math.round(e.loaded/e.total*100)+'%',true);};
     xhr.onload=function(){
-      if(xhr.status!==200){err='HTTP '+xhr.status;setBtn('重新准备',false);hint.textContent='准备失败（'+err+'），请点「重新准备」';return;}
+      if(xhr.status!==200){err='HTTP '+xhr.status;setBtn('重新准备',false);hint.textContent='准备失败（'+err+'），请点「重新准备」';log('预下载失败 '+err,'error');return;}
       var f=null;
       try{f=new File([xhr.response],name||('成片_'+Date.now()+'.mp4'),{type:xhr.response.type||'video/mp4'});}catch(e){f=xhr.response;}
       file=f;setBtn('保存到相册',false);
       hint.textContent='成片已准备好：点「保存到相册」→ 在系统菜单里选「储存视频」';
+      log('预下载完成','info',{mb:+(((xhr.response&&xhr.response.size)||0)/1048576).toFixed(1)});
     };
-    xhr.onerror=function(){err='网络错误';setBtn('重新准备',false);hint.textContent='网络错误，请点「重新准备」';};
-    xhr.ontimeout=function(){err='下载超时';setBtn('重新准备',false);hint.textContent='下载超时，请点「重新准备」';};
+    xhr.onerror=function(){err='网络错误';setBtn('重新准备',false);hint.textContent='网络错误，请点「重新准备」';log('预下载网络错误','error');};
+    xhr.ontimeout=function(){err='下载超时';setBtn('重新准备',false);hint.textContent='下载超时，请点「重新准备」';log('预下载超时','error');};
     xhr.send();
   }
   btn.onclick=function(){
     if(!file){if(err)start();return;}
+    log('点保存到相册');
     if(!navigator.share){showTip('当前浏览器不支持一键保存，请点「下载到文件」，或长按上方视频选择「储存视频」。');return;}
     var p;
     try{p=(navigator.canShare&&navigator.canShare({files:[file]}))?navigator.share({files:[file],title:name||'短视频成片'}):navigator.share({title:name||'短视频成片',url:location.href});}
     catch(e){showTip('没弹出菜单？<b>长按上方视频</b>选择「储存视频」，或点「下载到文件」。');return;}
-    (p&&p.then?p:Promise.resolve()).catch(function(e){
+    (p&&p.then?p:Promise.resolve()).then(function(){log('系统分享完成');}).catch(function(e){
       if(e&&e.name==='AbortError')return;
+      log('分享失败 '+((e&&(e.name+':'+e.message))||e),'error');
       showTip('没弹出菜单？<b>长按上方视频</b>选择「储存视频」，或点「下载到文件」。');
     });
   };
@@ -843,6 +865,7 @@ function computeStats() {
   const usersAll = new Set();
   const sessions = {};
   const durations = [];
+  const timings = { total: [], subtitle: [], compose: [], save: [] };
   const errorTop = {};
   const devices = { ios: 0, android: 0, desktop: 0, other: 0 };
 
@@ -877,13 +900,18 @@ function computeStats() {
 
     const s = e.s || '';
     if (!s) continue;
-    if (!sessions[s]) sessions[s] = { day, open: false, record: false, sub: false, compose: false, saved: false, tried: false, first: ts, composeTs: 0 };
+    if (!sessions[s]) sessions[s] = { day, open: false, record: false, sub: false, compose: false, saved: false, tried: false, first: ts, composeTs: 0, subStart: 0, subTs: 0, compStart: 0, saveStart: 0, saveTs: 0 };
     const S = sessions[s];
     if (ts < S.first) { S.first = ts; S.day = day; }
     if (t === 'usage' && /页面打开/.test(m)) S.open = true;
     if (t === 'record') S.record = true;
     if (t === 'subtitle') S.sub = true;
+    if (t === 'subtitle' && /开始生成字幕/.test(m) && !S.subStart) S.subStart = ts;
+    if (t === 'subtitle' && /字幕生成成功/.test(m) && !S.subTs) S.subTs = ts;
+    if (t === 'compose' && /开始云端合成/.test(m) && !S.compStart) S.compStart = ts;
     if (t === 'compose' && /合成成功/.test(m)) { S.compose = true; if (!S.composeTs) S.composeTs = ts; }
+    if (t === 'save' && /开始预下载成片|点保存到相册/.test(m) && !S.saveStart) S.saveStart = ts;
+    if (t === 'save' && /预下载完成/.test(m) && !S.saveTs) S.saveTs = ts;
     if (t === 'save' && /系统分享完成|预下载完成|保存\/下载文件/.test(m)) S.saved = true;
     if (t === 'save' && /点保存到相册|开始预下载|保存\/下载文件|系统分享|iframe内打开保存页/.test(m)) S.tried = true;
   }
@@ -901,7 +929,23 @@ function computeStats() {
     if (S.open && S.record && S.compose && S.saved) total.flows++;
     if (S.open && S.composeTs) {
       const mins = (S.composeTs - S.first) / 60000;
-      if (mins >= 0 && mins < 120) durations.push([S.day, Math.round(mins * 10) / 10]);
+      if (mins >= 0 && mins < 120) {
+        const sec = (S.composeTs - S.first) / 1000;
+        durations.push([S.day, Math.round(mins * 10) / 10]);
+        timings.total.push([S.day, Math.round(sec * 10) / 10]);
+      }
+    }
+    if (S.subStart && S.subTs) {
+      const sec = (S.subTs - S.subStart) / 1000;
+      if (sec > 0 && sec < 300) timings.subtitle.push([S.day, Math.round(sec * 10) / 10]);
+    }
+    if (S.compStart && S.composeTs) {
+      const sec = (S.composeTs - S.compStart) / 1000;
+      if (sec > 0 && sec < 600) timings.compose.push([S.day, Math.round(sec * 10) / 10]);
+    }
+    if (S.saveStart && S.saveTs) {
+      const sec = (S.saveTs - S.saveStart) / 1000;
+      if (sec > 0.5 && sec < 300) timings.save.push([S.day, Math.round(sec * 10) / 10]);
     }
   }
   total.users = usersAll.size;
@@ -914,7 +958,7 @@ function computeStats() {
   const todayDay = dayKeyOf(now);
   const tD = daysMap[todayDay];
   const data = {
-    ok: true, generatedAt: now, todayDay, total, days, durations, funnel, devices,
+    ok: true, generatedAt: now, todayDay, total, days, durations, timings, funnel, devices,
     errorTop: errors,
     today: tD ? { plays: tD.plays, users: tD.users.length, composed: tD.composed, saved: tD.saved } : { plays: 0, users: 0, composed: 0, saved: 0 },
   };
@@ -965,12 +1009,15 @@ body{background:radial-gradient(1200px 620px at 10% -12%,#e9efff 0%,rgba(233,239
 .k-sub{font-size:12px;color:#94a3b8;min-height:16px}
 .k-sub b{color:#475569}
 .spark{position:absolute;right:14px;bottom:12px;width:88px;height:30px;opacity:.9;pointer-events:none}
-.minis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:14px}
-.mini{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.72);border:1px solid var(--line);border-radius:14px;padding:11px 14px;min-width:0}
-.mini b{font-size:17px;font-variant-numeric:tabular-nums;white-space:nowrap}
-.mini span{font-size:12px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mini .dot{width:6px;height:6px;border-radius:50%;background:var(--brand);opacity:.6;flex:none}
-.mini .dot.g{background:var(--green)}.mini .dot.a{background:var(--amber)}.mini .dot.v{background:var(--violet)}
+.timings{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:14px}
+.tcard{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;box-shadow:0 1px 2px rgba(15,23,42,.03);min-width:0;transition:transform .2s,box-shadow .2s}
+.tcard:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(15,23,42,.06)}
+.t-top{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--sub);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.t-icon{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;flex:none}
+.t-icon svg{width:14px;height:14px}
+.t-num{font-size:26px;font-weight:800;letter-spacing:-.6px;margin-top:8px;line-height:1.1;font-variant-numeric:tabular-nums;white-space:nowrap}
+.t-num small{font-size:13px;font-weight:700;color:var(--sub);margin-left:3px;letter-spacing:0}
+.t-sub{font-size:11.5px;color:#94a3b8;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .grid{display:grid;grid-template-columns:1.65fr 1fr;gap:14px;margin-top:14px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px;box-shadow:0 1px 2px rgba(15,23,42,.03);min-width:0}
 .card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px}
@@ -1068,8 +1115,8 @@ footer{margin-top:22px;display:flex;justify-content:space-between;gap:10px;flex-
 .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);background:#0f172a;color:#fff;padding:10px 16px;border-radius:999px;font-size:12.5px;opacity:0;pointer-events:none;transition:.25s;z-index:20;box-shadow:0 10px 30px rgba(15,23,42,.25)}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 .hidden{display:none!important}
-@media(max-width:1080px){.kpis{grid-template-columns:repeat(2,1fr)}.minis{grid-template-columns:repeat(2,1fr)}.grid,.grid2{grid-template-columns:1fr}.chart{height:260px}}
-@media(max-width:640px){.app{padding:18px 14px 30px}.brand{flex:1;min-width:0}.brand h1{font-size:16px;white-space:nowrap}.brand p{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.en{display:none}.live,#print{display:none}.logo{width:40px;height:40px;border-radius:12px}.top{align-items:center}.top-right{gap:6px;flex:none}.muted{display:none}.kpi{padding:14px}.k-num{font-size:30px}.k-sub{font-size:11px}.spark{width:60px;opacity:.6}.card{padding:16px}.chart{height:230px}.donut{width:170px;height:170px}.qbody{grid-template-columns:1fr}.tabs button{padding:7px 10px}.hero-head h2{font-size:15px}.chart-foot{font-size:11px}.table-wrap{overflow:visible}table{min-width:0;font-size:12px}th,td{padding:9px 5px}th:nth-child(3),td:nth-child(3),th:nth-child(4),td:nth-child(4){display:none}.mini{padding:10px 11px;gap:7px}.mini span{font-size:11.5px}}
+@media(max-width:1080px){.kpis{grid-template-columns:repeat(2,1fr)}.timings{grid-template-columns:repeat(2,1fr)}.grid,.grid2{grid-template-columns:1fr}.chart{height:260px}}
+@media(max-width:640px){.app{padding:18px 14px 30px}.brand{flex:1;min-width:0}.brand h1{font-size:16px;white-space:nowrap}.brand p{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.en{display:none}.live,#print{display:none}.logo{width:40px;height:40px;border-radius:12px}.top{align-items:center}.top-right{gap:6px;flex:none}.muted{display:none}.kpi{padding:14px}.k-num{font-size:30px}.k-sub{font-size:11px}.spark{width:60px;opacity:.6}.card{padding:16px}.chart{height:230px}.donut{width:170px;height:170px}.qbody{grid-template-columns:1fr}.tabs button{padding:7px 10px}.hero-head h2{font-size:15px}.chart-foot{font-size:11px}.table-wrap{overflow:visible}table{min-width:0;font-size:12px}th,td{padding:9px 5px}th:nth-child(3),td:nth-child(3),th:nth-child(4),td:nth-child(4){display:none}.tcard{padding:12px 13px}.t-num{font-size:23px}.t-top{font-size:11.5px}}
 @media(min-width:1600px){.app{max-width:1620px;padding:34px 44px 48px}.brand h1{font-size:22px}.k-num{font-size:42px}.chart{height:340px}.kpi{padding:22px 22px 16px}}
 @media print{body{background:#fff}.app{max-width:none;padding:0}.icon-btn,.tabs,.chips,.ghost-btn,.quality,footer{display:none!important}.card,.kpi{box-shadow:none;break-inside:avoid}.grid,.grid2{grid-template-columns:1fr 1fr}.chart{height:260px}}
 </style></head><body>
@@ -1137,11 +1184,27 @@ footer{margin-top:22px;display:flex;justify-content:space-between;gap:10px;flex-
         <div class="spark" id="sp_saved"></div>
       </div>
     </div>
-    <div class="minis">
-      <div class="mini"><i class="dot"></i><b id="m_records">0</b><span>开始录制</span></div>
-      <div class="mini"><i class="dot v"></i><b id="m_subtitle">0</b><span>字幕生成</span></div>
-      <div class="mini"><i class="dot g"></i><b id="m_duration">—</b><span>平均出片</span></div>
-      <div class="mini"><i class="dot a"></i><b id="m_days">0</b><span>活跃天数</span></div>
+    <div class="timings">
+      <div class="tcard" title="从开始生成字幕到字幕完成">
+        <div class="t-top"><span class="t-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 10h3M7 14h5M14 10h3M14 14h3"/></svg></span>字幕生成平均时长</div>
+        <div class="t-num" id="t_sub">—</div>
+        <div class="t-sub" id="t_sub_note">平均耗时</div>
+      </div>
+      <div class="tcard" title="从提交云端合成到成片生成完成">
+        <div class="t-top"><span class="t-icon violet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 1.7 4.3L18 9l-4.3 1.7L12 15l-1.7-4.3L6 9l4.3-1.7L12 3Z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z"/></svg></span>一键成片平均时长</div>
+        <div class="t-num" id="t_compose">—</div>
+        <div class="t-sub" id="t_compose_note">平均耗时</div>
+      </div>
+      <div class="tcard" title="从开始准备成片到可以保存到相册">
+        <div class="t-top"><span class="t-icon amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/><path d="M12 3v11"/><path d="m8 10 4 4 4-4"/></svg></span>保存视频平均时长</div>
+        <div class="t-num" id="t_save">—</div>
+        <div class="t-sub" id="t_save_note">平均耗时</div>
+      </div>
+      <div class="tcard" title="从打开页面到成片生成完成">
+        <div class="t-top"><span class="t-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>全流程出片平均时长</div>
+        <div class="t-num" id="t_total">—</div>
+        <div class="t-sub" id="t_total_note">平均耗时</div>
+      </div>
     </div>
   </section>
 
@@ -1277,16 +1340,29 @@ footer{margin-top:22px;display:flex;justify-content:space-between;gap:10px;flex-
     a.users=Object.keys(a.uids).length;
     return a;
   }
-  function median(arr){
-    if(!arr.length)return 0;
-    var a=arr.slice().sort(function(x,y){return x-y;});
-    var m=Math.floor(a.length/2);
-    return a.length%2?a[m]:(a[m-1]+a[m])/2;
-  }
-  function durations(){
-    var d=S.data;if(!d||!d.durations)return [];
+  function timingsFor(kind){
+    var d=S.data;if(!d)return [];
+    var src=d.timings||{};
+    var arr=src[kind]||[];
+    if(kind==='total'&&!arr.length&&d.durations){
+      arr=d.durations.map(function(x){return [x[0],x[1]*60];});
+    }
     var start=S.series.length?S.series[0].day:'';
-    return d.durations.filter(function(x){return x[0]>=start;}).map(function(x){return x[1];});
+    return arr.filter(function(x){return x[0]>=start;}).map(function(x){return x[1];});
+  }
+  function renderTimings(){
+    var map=[['t_sub','subtitle'],['t_compose','compose'],['t_save','save'],['t_total','total']];
+    map.forEach(function(pair){
+      var el=$(pair[0]),note=$(pair[0]+'_note');
+      var vals=timingsFor(pair[1]);
+      if(!vals.length){el.textContent='—';if(note)note.textContent='暂无样本';return;}
+      var avg=vals.reduce(function(a,b){return a+b;},0)/vals.length;
+      var v,unit;
+      if(avg<59.5){v=avg<10?(Math.round(avg*10)/10).toFixed(1):String(Math.round(avg));unit='秒';}
+      else{v=(avg/60).toFixed(1);unit='分钟';}
+      el.innerHTML=v+'<small>'+unit+'</small>';
+      if(note)note.textContent=vals.length+' 次样本';
+    });
   }
   function spark(id,values,color){
     var el=$(id);if(!el)return;
@@ -1317,11 +1393,6 @@ footer{margin-top:22px;display:flex;justify-content:space-between;gap:10px;flex-
     $('k_users_sub').innerHTML='人均 <b>'+(a.plays/Math.max(1,a.users)).toFixed(1)+'</b> 次访问';
     $('k_composed_sub').innerHTML='合成成功率 <b>'+pct(a.composed,a.compose)+'%</b>';
     $('k_saved_sub').innerHTML='成片保存率 <b>'+pct(a.saved,a.composed)+'%</b>';
-    $('m_records').textContent=fmt(a.records);
-    $('m_subtitle').textContent=fmt(a.subtitle);
-    var durs=durations();
-    $('m_duration').textContent=durs.length?(Math.round(median(durs)*10)/10).toFixed(1)+' 分钟':'—';
-    $('m_days').textContent=fmt(a.days);
     spark('sp_plays',S.series.map(function(x){return x.plays;}),COLORS.plays);
     spark('sp_users',S.series.map(function(x){return x.users||0;}),'#7c3aed');
     spark('sp_composed',S.series.map(function(x){return x.composed;}),COLORS.composed);
@@ -1497,6 +1568,7 @@ footer{margin-top:22px;display:flex;justify-content:space-between;gap:10px;flex-
     if(!S.data)return;
     var a=agg();
     renderKpis(a,animate);
+    renderTimings();
     renderChart();
     renderFunnel(a);
     renderTable();

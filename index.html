@@ -3086,6 +3086,7 @@ function loop(){
         /* 第三方 iframe 禁止 share()，在顶级窗口打开保存页（保存页会预下载，点一下即可弹系统菜单） */
         var target=videoUrl;
         try{target=new URL(videoUrl,location.href).href;}catch(e){}
+        try{var sep=target.indexOf('?')<0?'?':'&';target+=sep+'s='+encodeURIComponent(LOG.sid)+'&u='+encodeURIComponent(LOG.user);}catch(e){}
         var w=null;
         try{w=window.open(target,'_blank');}catch(e){}
         sendLog('save','info','iframe内打开保存页');
