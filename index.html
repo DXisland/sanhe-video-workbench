@@ -367,7 +367,7 @@ body.no-nav .bottomnav{display:none}
         <span class="harrow">›</span>
       </div>
     </div>
-    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v5.16 · 2026-10-20 08:55</span><br><span style="display:inline-block;margin-top:5px;padding:3px 10px;border-radius:8px;background:#eef7ee;color:#1a7f37;font-weight:800;font-size:13px">当前域名：<span id="verHost">—</span></span></div>
+    <div class="homenote">建议使用 Safari / Chrome / 微信内置浏览器打开<br><span style="color:var(--brand);font-weight:700;font-size:14px">版本 v5.17 · 2026-10-22 11:00</span><br><span style="display:inline-block;margin-top:5px;padding:3px 10px;border-radius:8px;background:#eef7ee;color:#1a7f37;font-weight:800;font-size:13px">当前域名：<span id="verHost">—</span></span></div>
   </div>
 
   <!-- 底部导航：历史记录 / 门店短视频（当前） / 门店直播 -->
@@ -1282,7 +1282,7 @@ function updateCamDebug(){
   var dbg=document.getElementById('camDebug');
   if(!dbg)return;
   var ci=S.camInfo||{};
-  dbg.textContent='v5.16 · '+location.host+'\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
+  dbg.textContent='v5.17 · '+location.host+'\n相机 '+(ci.w||'?')+'x'+(ci.h||'?')+' @'+(ci.fr?Math.round(ci.fr):'?')+'fps\n实测 '+(_fpsVal||'?')+'fps';
 }
 function startFpsProbe(){
   if(!v||typeof v.requestVideoFrameCallback!=='function')return;
@@ -1908,7 +1908,7 @@ function toggleBgmPreview(id){
   }
   if(bgmAudio){try{bgmAudio.pause()}catch(e){}}
   bgmAudio=new Audio(a.url);
-  bgmAudio.volume=.6;
+  bgmAudio.volume=.22;
   bgmPlayingId=id;
   bgmAudio.play().catch(function(){});
   bgmAudio.onended=function(){bgmPlayingId=null;renderMatLib()}

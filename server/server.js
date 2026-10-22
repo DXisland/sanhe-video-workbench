@@ -469,12 +469,13 @@ async function handleCompose(req, res) {
     mainAudio = (1 + insFiles.length + (bgmPath ? 1 : 0)) + ':a';
     console.log('[compose] 主视频无音轨，已补静音');
   }
-  /* 音频：高通滤掉低频噪声 + FFT 降噪 + 温和增益（原来 1.8 会把底噪一起放大） */
-  fc.push('[' + mainAudio + ']highpass=f=95,afftdn=nr=8:nf=-35,dynaudnorm=p=0.9,volume=1.05[a0]');
+  /* 音频：高通滤掉低频噪声 + FFT 降噪 + 动态归一化；人声为主，BGM 压低。
+     注意 amix 必须 normalize=0，否则会把两路音量各除以 2，人声会被明显压小。 */
+  fc.push('[' + mainAudio + ']highpass=f=95,afftdn=nr=8:nf=-35,dynaudnorm=p=0.9,volume=1.25[a0]');
   if (bgmPath) {
     const aIdx = 1 + insFiles.length;
-    fc.push('[' + aIdx + ':a]volume=0.22[a1]');
-    fc.push('[a0][a1]amix=inputs=2:duration=first:dropout_transition=0[aout]');
+    fc.push('[' + aIdx + ':a]volume=0.08[a1]');
+    fc.push('[a0][a1]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[aout]');
   } else {
     fc.push('[a0]anull[aout]');
   }
